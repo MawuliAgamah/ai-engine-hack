@@ -62,6 +62,9 @@ Rules:
 - The index MUST match one of the options shown under "Available Actions".
 - Pick the SINGLE best action considering cost, hazard, occupancy, and your goal.
 - If all options are bad, pick the least bad one and explain why.
+
+## Learnings from Previous Attempts
+{learnings}
 """
 
 
@@ -70,18 +73,28 @@ def build_system_prompt(
     scenario: str,
     personality: str,
     goal: str,
+    learnings: str = "",
 ) -> str:
     """Build the static system prompt for an LLM-driven agent.
 
     This prompt is set once at agent creation and does NOT include the
     available actions (those change every tick and go in the user message).
+    If 'learnings' is non-empty, include the section in the prompt.
     """
-    return SYSTEM_PROMPT_TEMPLATE.format(
+    base_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         agent_id=agent_id,
         scenario=scenario,
         personality=personality,
         goal=goal,
+        learnings=""  # placeholder, will be replaced below
     )
+    if learnings and learnings.strip():
+        learnings_section = f"\n## Learnings from Previous Attempts\n{learnings.strip()}\n"
+        # Insert before the final newline (or at the end)
+        # Remove the placeholder line if present
+        base_prompt = base_prompt.replace("##\u00A0Learnings from Previous Attempts\n", "")
+        base_prompt += learnings_section
+    return base_prompt
 
 
 # ── Available-moves list ─────────────────────────────────────────────
