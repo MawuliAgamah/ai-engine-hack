@@ -130,8 +130,8 @@ class Cell:
     pos: Position
     terrain: Terrain
     walkable: bool
-    max_occupancy: int = 10
     cost: float
+    max_occupancy: int = 10
     hazard_level: float = 0.0
     elevation: float = 0.0
     agent_ids: list[int] = field(default_factory=list)
