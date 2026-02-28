@@ -1,0 +1,107 @@
+# Event Congestion Scenario
+# =========================
+# Large outdoor event (concert/festival) in a park.
+# Simulates crowd ingress, congestion pinch-points, and emergency evacuation.
+
+world:
+  width: 180
+  height: 120
+  features:
+    # Boundary fences
+    - terrain: wall
+      rect: { x: 0, y: 0, w: 180, h: 1 }
+    - terrain: wall
+      rect: { x: 0, y: 119, w: 180, h: 1 }
+    - terrain: wall
+      rect: { x: 0, y: 0, w: 1, h: 120 }
+    - terrain: wall
+      rect: { x: 179, y: 0, w: 1, h: 120 }
+
+    # Stage area (impassable)
+    - terrain: obstacle
+      rect: { x: 70, y: 5, w: 40, h: 15 }
+
+    # Vendor stalls
+    - terrain: obstacle
+      rect: { x: 10, y: 50, w: 8, h: 8 }
+    - terrain: obstacle
+      rect: { x: 30, y: 50, w: 8, h: 8 }
+    - terrain: obstacle
+      rect: { x: 140, y: 50, w: 8, h: 8 }
+    - terrain: obstacle
+      rect: { x: 160, y: 50, w: 8, h: 8 }
+
+    # Internal fencing creating crowd lanes
+    - terrain: wall
+      rect: { x: 50, y: 25, w: 1, h: 30 }
+    - terrain: wall
+      rect: { x: 129, y: 25, w: 1, h: 30 }
+
+    # Grass areas
+    - terrain: grass
+      rect: { x: 1, y: 1, w: 178, h: 118 }
+
+    # Paths between sections
+    - terrain: road
+      rect: { x: 1, y: 60, w: 178, h: 3 }
+    - terrain: road
+      rect: { x: 90, y: 1, w: 3, h: 118 }
+
+  exits:
+    # Main gates
+    - rect: { x: 80, y: 119, w: 20, h: 1 }
+    # Side gate left
+    - rect: { x: 0, y: 55, w: 1, h: 10 }
+    # Side gate right
+    - rect: { x: 179, y: 55, w: 1, h: 10 }
+    # Emergency exit (back of venue)
+    - rect: { x: 80, y: 0, w: 20, h: 1 }
+
+agents:
+  seed: 256
+  groups:
+    # General crowd near stage
+    - count: 300
+      spawn_area: { x: 30, y: 22, w: 120, h: 35 }
+      personality:
+        speed_mean: 0.8
+        speed_std: 0.2
+        panic_low: 0.3
+        panic_high: 0.6
+        herding_alpha: 5.0
+        herding_beta: 2.0
+
+    # Crowd in back areas
+    - count: 150
+      spawn_area: { x: 10, y: 65, w: 160, h: 40 }
+      personality:
+        speed_mean: 1.0
+        speed_std: 0.25
+        panic_low: 0.4
+        panic_high: 0.75
+
+    # VIP / staff (faster, calmer)
+    - count: 30
+      spawn_area: { x: 60, y: 5, w: 60, h: 15 }
+      personality:
+        speed_mean: 1.3
+        speed_std: 0.1
+        panic_low: 0.7
+        panic_high: 0.95
+        risk_alpha: 4.0
+        risk_beta: 2.0
+
+hazards:
+  # Crowd crush / stampede trigger (modeled as gas/pressure)
+  - type: gas
+    origin: { x: 90, y: 35 }
+    start_tick: 500
+    intensity: 0.6
+    spread_rate: 0.04
+    spread_radius: 25
+    duration: 200
+
+simulation:
+  dt: 0.1
+  max_ticks: 4000
+  field_update_interval: 20

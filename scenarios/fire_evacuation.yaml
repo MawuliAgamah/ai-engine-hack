@@ -1,0 +1,118 @@
+# Fire Evacuation Scenario
+# ========================
+# A multi-room office building with a fire breaking out.
+# Agents must navigate to exits while avoiding spreading flames.
+
+world:
+  width: 120
+  height: 80
+  features:
+    # Outer walls
+    - terrain: wall
+      rect: { x: 0, y: 0, w: 120, h: 1 }
+    - terrain: wall
+      rect: { x: 0, y: 79, w: 120, h: 1 }
+    - terrain: wall
+      rect: { x: 0, y: 0, w: 1, h: 80 }
+    - terrain: wall
+      rect: { x: 119, y: 0, w: 1, h: 80 }
+
+    # Interior walls creating rooms
+    - terrain: wall
+      rect: { x: 40, y: 0, w: 1, h: 35 }
+    - terrain: wall
+      rect: { x: 40, y: 45, w: 1, h: 35 }
+    - terrain: wall
+      rect: { x: 80, y: 0, w: 1, h: 35 }
+    - terrain: wall
+      rect: { x: 80, y: 45, w: 1, h: 35 }
+
+    # Corridor
+    - terrain: open
+      rect: { x: 1, y: 35, w: 118, h: 10 }
+
+    # Doors between rooms and corridor
+    - terrain: door
+      rect: { x: 40, y: 37, w: 1, h: 6 }
+    - terrain: door
+      rect: { x: 80, y: 37, w: 1, h: 6 }
+
+    # Obstacles (furniture)
+    - terrain: obstacle
+      rect: { x: 10, y: 10, w: 5, h: 3 }
+    - terrain: obstacle
+      rect: { x: 50, y: 15, w: 8, h: 2 }
+    - terrain: obstacle
+      rect: { x: 90, y: 12, w: 6, h: 4 }
+
+  exits:
+    # Main entrance (bottom center)
+    - rect: { x: 55, y: 79, w: 10, h: 1 }
+    # Emergency exit (right side)
+    - rect: { x: 119, y: 37, w: 1, h: 6 }
+    # Emergency exit (left side)
+    - rect: { x: 0, y: 37, w: 1, h: 6 }
+
+agents:
+  seed: 42
+  groups:
+    # Office workers in left wing
+    - count: 80
+      spawn_area: { x: 2, y: 2, w: 37, h: 32 }
+      personality:
+        speed_mean: 1.0
+        speed_std: 0.15
+        risk_alpha: 2.0
+        risk_beta: 5.0
+        panic_low: 0.4
+        panic_high: 0.7
+
+    # Office workers in middle section
+    - count: 60
+      spawn_area: { x: 42, y: 2, w: 37, h: 32 }
+      personality:
+        speed_mean: 1.1
+        speed_std: 0.2
+        risk_alpha: 3.0
+        risk_beta: 4.0
+        panic_low: 0.3
+        panic_high: 0.6
+
+    # Office workers in right wing
+    - count: 60
+      spawn_area: { x: 82, y: 2, w: 36, h: 32 }
+      personality:
+        speed_mean: 0.9
+        speed_std: 0.25
+        risk_alpha: 2.0
+        risk_beta: 6.0
+        panic_low: 0.5
+        panic_high: 0.9
+
+hazards:
+  # Primary fire — wind-driven spread toward the south-east
+  - type: fire
+    origin: { x: 60, y: 20 }
+    start_tick: 50
+    intensity: 0.9
+    spread_rate: 0.03
+    spread_radius: 30
+    duration: 0  # indefinite
+    spread_direction:
+      - { angle: 135, strength: 0.6 }   # SE lobe (dominant wind)
+      - { angle: 180, strength: 0.2 }   # minor southward drift
+
+  # Secondary fire — uniform radial (no wind bias)
+  - type: fire
+    origin: { x: 65, y: 25 }
+    start_tick: 200
+    intensity: 0.7
+    spread_rate: 0.02
+    spread_radius: 20
+    duration: 0
+    # spread_direction omitted → defaults to isotropic
+
+simulation:
+  dt: 0.1
+  max_ticks: 3000
+  field_update_interval: 15

@@ -95,21 +95,6 @@ class Position:
     def as_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
 
-
-# 8-connected neighborhood offsets (Moore neighborhood)
-MOORE_OFFSETS: list[Position] = [
-    Position(-1, -1), Position(0, -1), Position(1, -1),
-    Position(-1, 0),                   Position(1, 0),
-    Position(-1, 1),  Position(0, 1),  Position(1, 1),
-]
-
-# 4-connected neighborhood offsets (Von Neumann neighborhood)
-VON_NEUMANN_OFFSETS: list[Position] = [
-    Position(0, -1),
-    Position(-1, 0), Position(1, 0),
-    Position(0, 1),
-]
-
 # 6-connected neighborhood offsets for hex grids (pointy-topped)
 HEX_OFFSETS: list[Position] = [
     Position(-1, 1), Position(1, 1),
