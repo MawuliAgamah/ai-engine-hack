@@ -10,3 +10,6 @@ __pycache__/
 
 # ipynb checkpoints
 .ipynb_checkpoints/
+
+# .egg-info
+*.egg-info/
