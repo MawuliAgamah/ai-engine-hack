@@ -155,7 +155,7 @@ class LoadedPatch:
 
 
 def default_csv_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "southwark_reference_data_table.csv"
+    return Path(__file__).resolve().parent.parent / "reference_data/southwark_reference_data_table.csv"
 
 
 def clean_numpy_syntax(raw: str) -> str:
