@@ -7,7 +7,7 @@ Events can be scheduled for specific ticks (hazard onset, scenario triggers, etc
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 
