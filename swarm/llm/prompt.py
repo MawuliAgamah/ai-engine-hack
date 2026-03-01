@@ -105,7 +105,7 @@ def get_available_moves(
     """
     moves: list[tuple[str, Position]] = [("STAY at", percept.position)]
     for nb in percept.walkable_neighbors:
-        if nb != percept.position:
+        if nb != percept.position and percept.neighbor_hazards[nb] < 0.1:
             moves.append(("MOVE to", nb))
     random.shuffle(moves)  # randomize order to avoid positional bias in LLM choices
     return moves
