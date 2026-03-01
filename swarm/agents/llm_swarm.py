@@ -222,6 +222,8 @@ class LLMSwarm:
         count: int,
         spawn_area: tuple[int, int, int, int] | None,
     ) -> list[Position]:
+        from swarm.core.world import Terrain
+
         if spawn_area:
             sx, sy, sw, sh = spawn_area
             candidates = [
@@ -230,9 +232,14 @@ class LLMSwarm:
                 for dx in range(sw)
                 if world.in_bounds(sx + dx, sy + dy)
                 and world.walkable_grid[sy + dy, sx + dx]
+                and int(world.terrain_grid[sy + dy, sx + dx]) != Terrain.EXIT.value
             ]
         else:
-            candidates = list(world.walkable_positions())
+            # Walkable non-exit cells only
+            candidates = [
+                p for p in world.walkable_positions()
+                if int(world.terrain_grid[p.y, p.x]) != Terrain.EXIT.value
+            ]
 
         if len(candidates) < count:
             raise ValueError(

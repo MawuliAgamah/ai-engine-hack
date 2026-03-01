@@ -73,22 +73,17 @@ class ScenarioConfig:
     scenario_text: str = "Business as usual — no hazards."  # scenario text
     goal: str = "Navigate the environment."  # default agent goal
 
+    # World
+    data_path: str = "reference_data/southwark_reference_data_table.parquet.gzip"
+    num_exits: int | None = None  # None = default spacing; int = exact count
+
     # Simulation params
-    width: int = 40
-    height: int = 40
     steps: int = 120  # simulation steps
     seed: int | None = 42  # simulation seed
     dt: float = 0.1  # time per tick in seconds
     awareness_radius: float = 5.0  # perception radius for LLM agents
     use_llm: bool = False  # use real LLM client
     interval_ms: int = 250  # web viewer poll / step interval
-
-    # World generation
-    num_exits: int = 4
-    wall_density: float = 0.10
-    building_density: float = 0.08
-    grass_density: float = 0.12
-    water_density: float = 0.03
 
     # Agent groups
     agent_groups: list[AgentGroupConfig] = field(default_factory=list)
@@ -230,15 +225,12 @@ def load_scenario(path: str | Path) -> ScenarioConfig:
     use_llm = bool(sim_sec.get("use_llm", False))
     interval_ms = int(sim_sec.get("interval_ms", 250))
 
-    # ── World generation params ───────────────────────────────────
+    # ── World data path / exits ────────────────────────────────────
     world_sec = raw.get("world", {})
-    width = int(world_sec.get("width", 40))
-    height = int(world_sec.get("height", 40))
-    num_exits = int(world_sec.get("num_exits", 4))
-    wall_density = float(world_sec.get("wall_density", 0.10))
-    building_density = float(world_sec.get("building_density", 0.08))
-    grass_density = float(world_sec.get("grass_density", 0.12))
-    water_density = float(world_sec.get("water_density", 0.03))
+    data_path = str(world_sec.get("data_path", "reference_data/southwark_reference_data_table.parquet.gzip"))
+    num_exits: int | None = world_sec.get("num_exits")
+    if num_exits is not None:
+        num_exits = int(num_exits)
 
     # ── Agent groups ──────────────────────────────────────────────
     agents_sec = raw.get("agents", {})
@@ -271,19 +263,14 @@ def load_scenario(path: str | Path) -> ScenarioConfig:
         description=description,
         scenario_text=scenario_text,
         goal=goal,
-        width=width,
-        height=height,
+        data_path=data_path,
+        num_exits=num_exits,
         steps=steps,
         seed=seed,
         dt=dt,
         awareness_radius=awareness_radius,
         use_llm=use_llm,
         interval_ms=interval_ms,
-        num_exits=num_exits,
-        wall_density=wall_density,
-        building_density=building_density,
-        grass_density=grass_density,
-        water_density=water_density,
         agent_groups=groups,
         pheromone_configs=pheromone_cfgs,
         hazard_events=hazards,
