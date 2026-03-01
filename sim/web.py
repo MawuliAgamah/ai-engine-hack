@@ -6,7 +6,7 @@ agent visualisation, real-time stats, and start/pause/step/reset controls.
 
 Run with::
 
-    python -m sim.web --host 127.0.0.1 --port 8765 --steps 120 --num-agents 20 --seed 2026
+    python -m sim.web --host 127.0.0.1 --port 8765 --config baseline.yaml
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import time
 from typing import Any
 
 from flask import Flask, Response, jsonify, request
+
+from pathlib import Path
 
 from .model import SimConfig, SwarmModel
 
@@ -382,15 +384,24 @@ HTML_PAGE = r"""<!doctype html>
 class SimulationSession:
     """Manages a running simulation with background thread advancement."""
 
-    def __init__(self, config: SimConfig, interval_ms: int = 250) -> None:
+    def __init__(
+        self,
+        config: SimConfig,
+        interval_ms: int = 250,
+        scenario_path: str | Path | None = None,
+    ) -> None:
         self.config = config
         self.interval_ms = max(40, int(interval_ms))
+        self.scenario_path = scenario_path
 
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._running = False
 
-        self.model = SwarmModel(config)
+        self.model = SwarmModel(config=config, scenario_path=scenario_path)
+        # Sync config to reflect what the model *actually* used (scenario
+        # loading may override width/height/num_agents/goal/scenario).
+        self.config = self.model.config
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -430,10 +441,11 @@ class SimulationSession:
     def reset(self, config: SimConfig, interval_ms: int | None = None) -> None:
         with self._lock:
             self._running = False
-            self.config = config
             if interval_ms is not None:
                 self.interval_ms = max(40, int(interval_ms))
-            self.model = SwarmModel(config)
+            self.model = SwarmModel(config=config, scenario_path=self.scenario_path)
+            # Sync config to reflect what the model actually used.
+            self.config = self.model.config
 
     def static_payload(self) -> dict[str, Any]:
         with self._lock:
@@ -561,13 +573,29 @@ def parse_args() -> argparse.Namespace:
         "--use-llm",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Use real LLM client (requires API_KEY env var).",
+        help="Use real LLM client (requires API_KEY and BASE_URL in .env).",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to a scenario YAML file (e.g. scenarios/baseline.yaml).",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+
+    # Resolve scenario YAML path (look in scenarios/ if bare filename)
+    scenario_path: str | None = None
+    if args.config:
+        p = Path(args.config)
+        if not p.exists():
+            candidate = Path("scenarios") / p
+            if candidate.exists():
+                p = candidate
+        scenario_path = str(p)
 
     config = SimConfig(
         width=args.width,
@@ -578,7 +606,11 @@ def main() -> None:
         use_llm=args.use_llm,
     )
 
-    session = SimulationSession(config=config, interval_ms=args.interval_ms)
+    session = SimulationSession(
+        config=config,
+        interval_ms=args.interval_ms,
+        scenario_path=scenario_path,
+    )
     container = AppContainer(session)
     app = create_app(container)
 

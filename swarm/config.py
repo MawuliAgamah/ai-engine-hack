@@ -9,7 +9,6 @@ from typing import Any
 
 import yaml
 
-from swarm.agents.personality import PersonalityDistribution
 from swarm.agents.swarm import Swarm
 from swarm.core.clock import Clock
 from swarm.core.events import EventScheduler, HazardEvent, HazardType
@@ -73,21 +72,6 @@ def build_swarm(config: dict[str, Any], world: World) -> Swarm:
     for group in groups:
         count = group.get("count", 100)
 
-        # Personality distribution
-        dist_cfg = group.get("personality", {})
-        dist = PersonalityDistribution(
-            speed_mean=dist_cfg.get("speed_mean", 1.0),
-            speed_std=dist_cfg.get("speed_std", 0.2),
-            risk_alpha=dist_cfg.get("risk_alpha", 2.0),
-            risk_beta=dist_cfg.get("risk_beta", 5.0),
-            panic_low=dist_cfg.get("panic_low", 0.3),
-            panic_high=dist_cfg.get("panic_high", 0.8),
-            herding_alpha=dist_cfg.get("herding_alpha", 3.0),
-            herding_beta=dist_cfg.get("herding_beta", 2.0),
-            patience_mean=dist_cfg.get("patience_mean", 20.0),
-            patience_std=dist_cfg.get("patience_std", 10.0),
-        )
-
         # Spawn area
         spawn_cfg = group.get("spawn_area")
         spawn_area = None
@@ -102,7 +86,6 @@ def build_swarm(config: dict[str, Any], world: World) -> Swarm:
         swarm.spawn_agents(
             world=world,
             count=count,
-            distribution=dist,
             spawn_area=spawn_area,
         )
 
@@ -146,7 +129,6 @@ def build_simulation(config_path: str | Path):
     """
     from swarm.core.engine import SimulationEngine
     from swarm.shared.blackboard import Blackboard
-    from swarm.shared.fields import FieldManager
     from swarm.shared.pheromones import PheromoneSystem
 
     config = load_config(config_path)
@@ -156,7 +138,6 @@ def build_simulation(config_path: str | Path):
     events = build_events(config)
 
     pheromones = PheromoneSystem(world)
-    fields = FieldManager(world, update_interval=config.get("simulation", {}).get("field_update_interval", 20))
     blackboard = Blackboard()
 
     engine = SimulationEngine(
@@ -165,7 +146,6 @@ def build_simulation(config_path: str | Path):
         clock=clock,
         event_scheduler=events,
         pheromone_system=pheromones,
-        field_manager=fields,
         blackboard=blackboard,
     )
 

@@ -4,7 +4,6 @@ Base agent — the autonomous entity that navigates the world.
 Each agent has:
 - A unique ID
 - A position in the world
-- Personality traits (stochastic)
 - A three-layer decision system (reactive / tactical / strategic)
 - Local memory (visited cells, reasoning chain, last plan, current state)
 - An RNG for stochastic behavior
@@ -23,23 +22,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from swarm.agents.decisions.reactive import (
-    compute_reactive_forces,
-    force_to_position,
-)
-from swarm.agents.decisions.strategic import (
-    StrategicDecision,
-    evaluate_exits,
-    should_replan,
-    simulated_annealing_replan,
-)
-from swarm.agents.decisions.tactical import (
-    TacticalPlan,
-    astar_local,
-    gradient_direction_at,
-)
 from swarm.agents.perception import perceive
-from swarm.agents.personality import PersonalityTraits
 from swarm.core.world import Position, World
 
 
@@ -80,7 +63,7 @@ class Agent:
         self,
         agent_id: int,
         position: Position,
-        personality: PersonalityTraits,
+        personality: str = "",
         seed: int | None = None,
     ):
         self.id = agent_id
@@ -91,10 +74,6 @@ class Agent:
         # State
         self.state = AgentState.NAVIGATING
         self.velocity: tuple[float, float] = (0.0, 0.0)
-
-        # Decision layers
-        self.strategic_goal: StrategicDecision | None = None
-        self.tactical_plan: TacticalPlan | None = None
 
         # Memory
         self.memory = AgentMemory()

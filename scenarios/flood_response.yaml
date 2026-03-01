@@ -3,50 +3,6 @@
 # Coastal area with rising water levels.
 # Agents must evacuate to high ground before flooding spreads.
 
-world:
-  width: 150
-  height: 100
-  features:
-    # Beach / low ground (south)
-    - terrain: water
-      rect: { x: 0, y: 85, w: 150, h: 15 }
-
-    # Roads (grid pattern)
-    - terrain: road
-      rect: { x: 0, y: 30, w: 150, h: 3 }
-    - terrain: road
-      rect: { x: 0, y: 60, w: 150, h: 3 }
-    - terrain: road
-      rect: { x: 30, y: 0, w: 3, h: 85 }
-    - terrain: road
-      rect: { x: 70, y: 0, w: 3, h: 85 }
-    - terrain: road
-      rect: { x: 110, y: 0, w: 3, h: 85 }
-
-    # Buildings
-    - terrain: building
-      rect: { x: 5, y: 35, w: 20, h: 20 }
-    - terrain: building
-      rect: { x: 35, y: 35, w: 30, h: 20 }
-    - terrain: building
-      rect: { x: 75, y: 35, w: 30, h: 20 }
-    - terrain: building
-      rect: { x: 5, y: 65, w: 20, h: 15 }
-    - terrain: building
-      rect: { x: 35, y: 65, w: 30, h: 15 }
-    - terrain: building
-      rect: { x: 75, y: 65, w: 30, h: 15 }
-
-    # Grass / park areas
-    - terrain: grass
-      rect: { x: 115, y: 5, w: 30, h: 20 }
-
-  exits:
-    # High ground evacuation points (north)
-    - rect: { x: 0, y: 0, w: 150, h: 2 }
-    # Elevated shelter
-    - rect: { x: 115, y: 5, w: 4, h: 4 }
-
 agents:
   seed: 123
   groups:

@@ -153,7 +153,8 @@ class LLMAgent:
     # ── Phase 2: DECIDE (LLM call) ───────────────────────────────
 
     def build_messages(
-        self, percept: LocalPercept, tick: int
+        self, percept: LocalPercept, tick: int,
+        blackboard_alerts: dict[str, object] | None = None,
     ) -> tuple[list[dict[str, str]], list[Position]]:
         """Build the LLM messages and available-position list.
 
@@ -172,6 +173,7 @@ class LLMAgent:
             reasoning_history=self.memory.reasoning,
             max_journey=self.memory.JOURNEY_WINDOW,
             max_reasoning=self.memory.REASONING_WINDOW,
+            blackboard_alerts=blackboard_alerts,
         )
 
         messages = [
@@ -197,8 +199,7 @@ class LLMAgent:
         """Build the prompt, call the LLM, and parse the response.
 
         Convenience wrapper around ``build_messages`` → LLM call →
-        ``parse_decision``.  For batch inference across many agents use
-        ``LLMSwarm._decide_batch`` instead.
+        ``parse_decision``.
         """
         messages, available_positions = self.build_messages(percept, tick)
         response_text = self.client.complete(messages, agent_id=self.id)

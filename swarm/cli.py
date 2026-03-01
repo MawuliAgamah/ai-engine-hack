@@ -230,7 +230,6 @@ def _build_from_dict(config: dict):
     from swarm.core.engine import SimulationEngine
     from swarm.config import build_world, build_clock, build_swarm, build_events
     from swarm.shared.blackboard import Blackboard
-    from swarm.shared.fields import FieldManager
     from swarm.shared.pheromones import PheromoneSystem
 
     world = build_world(config)
@@ -244,7 +243,6 @@ def _build_from_dict(config: dict):
         clock=clock,
         event_scheduler=events,
         pheromone_system=PheromoneSystem(world),
-        field_manager=FieldManager(world),
         blackboard=Blackboard(),
     )
 

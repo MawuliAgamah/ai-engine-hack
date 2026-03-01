@@ -4,6 +4,13 @@ Mesa-compatible model wrapping the swarm simulation engine.
 Creates a randomised world with diverse terrain, spawns LLM-driven agents,
 and advances the simulation tick-by-tick.  Exposes helpers that the web
 viewer queries for state snapshots.
+
+Supports two modes:
+
+1. **SimConfig** — programmatic config with a flat personality string.
+2. **Scenario YAML** — rich config loaded via ``swarm.scenarios.loader``
+   with per-group personality archetypes, hazard events, blackboard
+   alerts, and discrete terrain events.
 """
 
 from __future__ import annotations
@@ -11,6 +18,7 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -22,8 +30,13 @@ from swarm.core.clock import Clock
 from swarm.core.events import EventScheduler
 from swarm.core.world import Terrain, World
 from swarm.llm.client import LLMClient, MockClient
+from swarm.scenarios.loader import (
+    BlackboardPost,
+    ScenarioConfig,
+    build_event_scheduler,
+    load_scenario,
+)
 from swarm.shared.blackboard import Blackboard
-from swarm.shared.fields import FieldManager
 from swarm.shared.pheromones import PheromoneSystem
 
 load_dotenv()  # Load .env file from project root
@@ -36,18 +49,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SimConfig:
-    """Core simulation parameters."""
+    """Core simulation parameters (flat / programmatic mode)."""
 
     width: int = 40
     height: int = 40
     num_agents: int = 20
     steps: int = 120
-    seed: int | None = 2026
-    scenario: str = "A fire has broken out in the building. Evacuate immediately."
-    goal: str = "Reach the nearest exit and evacuate safely."
-    personality: str = "You are a cautious pedestrian who prefers safe, uncrowded routes."
-    awareness_radius: float = 1.0
-    use_llm: bool = False  # If True and API_KEY is set, use real LLM
+    seed: int | None = 42
+    dt: float = 0.1
+    scenario: str = "Business as usual."
+    goal: str = "Navigate the environment."
+    personality: str = ""
+    awareness_radius: float = 5.0
+    use_llm: bool = False
+    interval_ms: int = 250
+    # World generation
+    num_exits: int = 4
+    wall_density: float = 0.10
+    building_density: float = 0.08
+    grass_density: float = 0.12
+    water_density: float = 0.03
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,7 +78,6 @@ class SimConfig:
             "steps": self.steps,
             "seed": self.seed,
             "scenario": self.scenario,
-            "goal": self.goal,
             "awareness_radius": self.awareness_radius,
             "use_llm": self.use_llm,
         }
@@ -67,9 +87,9 @@ class SimConfig:
 
 
 def generate_random_world(
-    width: int,
-    height: int,
-    rng: random.Random,
+    width: int = 40,
+    height: int = 40,
+    rng: random.Random = None,
     num_exits: int = 4,
     wall_density: float = 0.10,
     building_density: float = 0.08,
@@ -203,9 +223,52 @@ def generate_random_world(
 
 
 class SwarmModel:
-    """Top-level simulation model — wraps the swarm engine for the web viewer."""
+    """Top-level simulation model — wraps the swarm engine for the web viewer.
 
-    def __init__(self, config: SimConfig) -> None:
+    Accepts *either* a flat ``SimConfig`` or a ``scenario_path`` to a YAML
+    file.  When a scenario path is provided, its agent groups, hazards,
+    events, and blackboard posts are used instead of :class:`SimConfig`
+    defaults.
+    """
+
+    def __init__(
+        self,
+        config: SimConfig | None = None,
+        scenario_path: str | Path | None = None,
+    ) -> None:
+        # ── Resolve config ────────────────────────────────────────
+        self._scenario: ScenarioConfig | None = None
+        self._bb_posts: list[BlackboardPost] = []
+
+        if scenario_path is not None:
+            sc = load_scenario(scenario_path)
+            self._scenario = sc
+            self._bb_posts = list(sc.blackboard_posts)
+
+            # Build a SimConfig merging YAML values with any CLI overrides.
+            total_agents = sum(g.count for g in sc.agent_groups) or 20
+            config = SimConfig(
+                width=sc.width,
+                height=sc.height,
+                num_agents=total_agents,
+                steps=sc.steps,
+                seed=sc.seed,
+                dt=sc.dt,
+                scenario=sc.scenario_text,
+                goal=sc.goal,
+                personality="",  # unused — per-agent personality below
+                awareness_radius=sc.awareness_radius,
+                use_llm=sc.use_llm,
+                interval_ms=sc.interval_ms,
+                num_exits=sc.num_exits,
+                wall_density=sc.wall_density,
+                building_density=sc.building_density,
+                grass_density=sc.grass_density,
+                water_density=sc.water_density,
+            )
+        elif config is None:
+            config = SimConfig()
+
         self.config = config
         self.rng = random.Random(config.seed)
         self.tick = 0
@@ -213,39 +276,75 @@ class SwarmModel:
 
         # Build world
         self.world = generate_random_world(
-            config.width, config.height, self.rng,
+            width=config.width,
+            height=config.height,
+            rng=self.rng,
+            num_exits=config.num_exits,
+            wall_density=config.wall_density,
+            building_density=config.building_density,
+            grass_density=config.grass_density,
+            water_density=config.water_density,
         )
 
         # Build LLM client
         self.client: LLMClient = self._make_client(config)
 
         # Build swarm
+        seed = config.seed or 42
         self.swarm = LLMSwarm(
             client=self.client,
-            seed=config.seed or 42,
+            seed=seed,
         )
 
-        # Spawn agents
-        self.swarm.spawn_batch(
-            world=self.world,
-            count=config.num_agents,
-            goal=config.goal,
-            personality=config.personality,
-            scenario=config.scenario,
-            awareness_radius=config.awareness_radius,
-        )
+        # ── Spawn agents ──────────────────────────────────────────
+        if self._scenario and self._scenario.agent_groups:
+            # Per-group spawning using YAML group descriptions
+            for group in self._scenario.agent_groups:
+                spawn_area = group.spawn_area
+                group_goal = group.goal or config.goal
+                personality_text = group.description or config.personality
+                positions = self.swarm._get_spawn_positions(
+                    self.world, group.count, spawn_area,
+                )
+                for pos in positions:
+                    self.swarm.spawn_agent(
+                        world=self.world,
+                        position=pos,
+                        goal=group_goal,
+                        personality=personality_text,
+                        scenario=config.scenario,
+                        awareness_radius=config.awareness_radius,
+                    )
+        else:
+            # Flat-mode batch spawn
+            self.swarm.spawn_batch(
+                world=self.world,
+                count=config.num_agents,
+                goal=config.goal,
+                personality=config.personality,
+                scenario=config.scenario,
+                awareness_radius=config.awareness_radius,
+            )
 
-        # Build engine subsystems
-        self.clock = Clock(dt=0.1, max_ticks=config.steps)
-        self.pheromones = PheromoneSystem(self.world)
-        self.fields = FieldManager(self.world)
+        # ── Engine subsystems ─────────────────────────────────────
+        self.clock = Clock(dt=config.dt, max_ticks=config.steps)
+
+        # Use pheromone configs from scenario if available
+        phero_cfgs = None
+        if self._scenario and self._scenario.pheromone_configs:
+            phero_cfgs = self._scenario.pheromone_configs
+        self.pheromones = PheromoneSystem(self.world, configs=phero_cfgs)
         self.blackboard = Blackboard()
-        self.events = EventScheduler()
+
+        # Event scheduler — populated from YAML or empty
+        if self._scenario:
+            self.events = build_event_scheduler(self._scenario)
+        else:
+            self.events = EventScheduler()
 
         # Initialise fields
         if not self.world.has_layer("hazard_prev"):
             self.world.add_layer("hazard_prev", default=0.0)
-        self.fields.update(0, force=True)
 
     # ── Step ──────────────────────────────────────────────────
 
@@ -261,14 +360,19 @@ class SwarmModel:
         self.clock.advance()
         tick = self.clock.tick
 
+        # ── Post scheduled blackboard alerts ──────────────────────
+        for post in self._bb_posts:
+            if post.tick == tick:
+                self.blackboard.set(
+                    post.key, post.value, tick, ttl=post.ttl,
+                )
+                logger.debug("BB post @t=%d: %s = %s", tick, post.key, post.value)
+
         # Step events / hazards
         self.events.process_tick(self.world, tick)
 
-        # Update fields periodically
-        self.fields.update(tick)
-
-        # Step all agents
-        self.swarm.step_all(self.world, tick)
+        # Step all agents (perceive → decide → execute)
+        self.swarm.step_all(self.world, tick, blackboard=self.blackboard)
 
         # Update pheromones
         self.pheromones.update()
@@ -287,13 +391,13 @@ class SwarmModel:
             api_key = os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
             if api_key:
                 from swarm.llm.client import OpenAIClient
-                logger.info("Using OpenAIClient (model=%s, base_url=https://api.doubleword.ai/v1)", OpenAIClient.__init__.__defaults__[0])
+                logger.info("Using OpenAIClient (model=%s", OpenAIClient.__init__.__defaults__[0])
                 return OpenAIClient()
             else:
                 logger.warning("use_llm=True but no API_KEY or OPENAI_API_KEY found — falling back to MockClient")
         else:
-            logger.info("use_llm=False — using MockClient (strategy=first_move)")
-        return MockClient(strategy="first_move")
+            logger.info("use_llm=False — using MockClient (strategy=first_shuffled_move)")
+        return MockClient(strategy="first_shuffled_move")
 
     # ── Queries (for web viewer) ─────────────────────────────────
 

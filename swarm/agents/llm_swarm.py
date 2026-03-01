@@ -5,8 +5,8 @@ LLM-driven swarm orchestrator.
 three-phase simulation loop:
 
 1. **Perceive** — all active agents observe their local environment.
-2. **Decide**   — all observations are sent to the LLM (potentially in a
-   batch) and responses are parsed into ranked-action decisions.
+2. **Decide**   — each agent's observation is sent to the LLM sequentially
+   and the response is parsed into an action decision.
 3. **Execute**  — movements are applied to the world grid and agent memory
    is updated.
 
@@ -27,6 +27,7 @@ from swarm.agents.llm_agent import LLMAgent
 from swarm.agents.swarm import SwarmStats
 from swarm.core.world import Position, World
 from swarm.llm.client import LLMClient
+from swarm.shared.blackboard import Blackboard
 
 
 class LLMSwarm:
@@ -90,14 +91,19 @@ class LLMSwarm:
 
     # ── Phased stepping ───────────────────────────────────────────
 
-    def step_all(self, world: World, tick: int) -> None:
+    def step_all(
+        self,
+        world: World,
+        tick: int,
+        blackboard: Blackboard | None = None,
+    ) -> None:
         """Execute one simulation tick with phased ordering.
 
         Phase 1 — **Perceive**: every active agent reads the *same*
         world snapshot.
 
-        Phase 2 — **Decide**: each perception is sent to the LLM.
-        (Override ``_decide_batch`` for true parallel / batch API calls.)
+        Phase 2 — **Decide**: each perception is sent to the LLM
+        sequentially via ``_decide_sequential``.
 
         Phase 3 — **Execute**: chosen moves are applied to the world
         grid, agent state and memory are updated, pheromones deposited.
@@ -106,6 +112,13 @@ class LLMSwarm:
         # Shuffle to avoid consistent bias in execution order
         self.rng.shuffle(active)
 
+        # Snapshot active blackboard alerts once for all agents this tick
+        bb_alerts: dict[str, object] | None = None
+        if blackboard is not None:
+            entries = blackboard.all_entries(tick)
+            if entries:
+                bb_alerts = entries
+
         # Phase 1: Perceive
         agent_percepts: dict[int, tuple[LLMAgent, object]] = {}
         for agent in active:
@@ -113,8 +126,8 @@ class LLMSwarm:
             if percept is not None:
                 agent_percepts[agent.id] = (agent, percept)
 
-        # Phase 2: Decide
-        decisions = self._decide_batch(agent_percepts, tick)
+        # Phase 2: Decide (sequential LLM calls)
+        decisions = self._decide_sequential(agent_percepts, tick, bb_alerts)
 
         # Phase 3: Execute
         for aid, (agent, _percept) in agent_percepts.items():
@@ -122,46 +135,39 @@ class LLMSwarm:
                 agent.execute(world, decisions[aid], tick)
                 agent.deposit_pheromones(world)
 
-    def _decide_batch(
+    def _decide_sequential(
         self,
         agent_percepts: dict[int, tuple[LLMAgent, object]],
         tick: int,
+        blackboard_alerts: dict[str, object] | None = None,
     ) -> dict[int, object]:
-        """Build all prompts, call the LLM in a single batch, parse results.
-
-        This gathers messages from every agent first, sends them all
-        through ``client.complete_batch`` (which may execute concurrently
-        on a GPU inference server), and then parses all responses.
-        """
+        """Build prompts and call the LLM sequentially for each agent."""
         from swarm.agents.perception import LocalPercept  # avoid circular
+        import logging
 
-        # ── Build all messages (CPU-only) ─────────────────────────
-        ordered_ids: list[int] = []
-        all_messages: list[list[dict[str, str]]] = []
-        all_available: list[list[Position]] = []
-        all_fallbacks: list[Position] = []
+        logger = logging.getLogger(__name__)
+        decisions: dict[int, object] = {}
 
         for aid, (agent, percept) in agent_percepts.items():
             assert isinstance(percept, LocalPercept)
-            messages, available = agent.build_messages(percept, tick)
-            ordered_ids.append(aid)
-            all_messages.append(messages)
-            all_available.append(available)
-            all_fallbacks.append(percept.position)
-
-        if not ordered_ids:
-            return {}
-
-        # ── Batch LLM call (GPU / network) ────────────────────────
-        responses = self.client.complete_batch(all_messages)
-
-        # ── Parse all responses (CPU-only) ────────────────────────
-        decisions: dict[int, object] = {}
-        for aid, resp, avail, fb in zip(
-            ordered_ids, responses, all_available, all_fallbacks
-        ):
-            agent = agent_percepts[aid][0]
-            decisions[aid] = agent.parse_decision(resp, avail, fb)
+            try:
+                messages, available = agent.build_messages(
+                    percept, tick, blackboard_alerts
+                )
+                response_text = self.client.complete(
+                    messages, agent_id=aid
+                )
+                decisions[aid] = agent.parse_decision(
+                    response_text, available, percept.position
+                )
+            except Exception as exc:
+                logger.warning("Agent %d decision failed: %s", aid, exc)
+                # Fall back to staying in place
+                decisions[aid] = agent.parse_decision(
+                    "Error fallback — staying put | 0",
+                    available,
+                    percept.position,
+                )
 
         return decisions
 

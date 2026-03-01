@@ -26,7 +26,6 @@ from swarm.core.clock import Clock
 from swarm.core.events import EventScheduler
 from swarm.core.world import World
 from swarm.shared.blackboard import Blackboard
-from swarm.shared.fields import FieldManager
 from swarm.shared.pheromones import PheromoneSystem
 
 
@@ -56,7 +55,6 @@ class SimulationEngine:
         clock: Clock,
         event_scheduler: EventScheduler | None = None,
         pheromone_system: PheromoneSystem | None = None,
-        field_manager: FieldManager | None = None,
         blackboard: Blackboard | None = None,
     ):
         self.world = world
@@ -64,7 +62,6 @@ class SimulationEngine:
         self.clock = clock
         self.events = event_scheduler or EventScheduler()
         self.pheromones = pheromone_system or PheromoneSystem(world)
-        self.fields = field_manager or FieldManager(world)
         self.blackboard = blackboard or Blackboard()
 
         self.metrics = MetricsCollector()
@@ -84,8 +81,6 @@ class SimulationEngine:
 
     def initialize(self) -> None:
         """Initialize all subsystems before running."""
-        # Compute initial fields
-        self.fields.update(0, force=True)
 
         # Create hazard_prev layer for rate-of-change estimation in perception
         if not self.world.has_layer("hazard_prev"):
@@ -105,16 +100,13 @@ class SimulationEngine:
         event_names = self.events.process_tick(self.world, tick)
         event_names.extend(clock_events)
 
-        # 3. Update spatial fields (periodically)
-        self.fields.update(tick)
-
-        # 4. Step all agents
+        # 3. Step all agents
         self.swarm.step_all(self.world, tick)
 
-        # 5. Update pheromone system
+        # 4. Update pheromone system
         self.pheromones.update()
 
-        # 6. Collect metrics
+        # 5. Collect metrics
         stats = self.swarm.get_stats()
         active_hazards = len(self.events.active_hazards(tick))
 

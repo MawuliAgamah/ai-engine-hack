@@ -4064,7 +4064,7 @@ packages:
 - pypi: ./
   name: swarm-sim
   version: 0.1.0
-  sha256: 97291518f8fd2091a1e32e2f5fc0c5edf7b89d713b410023bcdc79605a982e14
+  sha256: 8fc758bba0df2fda754d47593f76dc0ca319dc80dae052b6c01f2096b3de6d15
   requires_dist:
   - numpy>=1.26
   - pyyaml>=6.0

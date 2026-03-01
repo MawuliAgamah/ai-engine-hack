@@ -15,7 +15,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from swarm.agents.base import Agent, AgentState
-from swarm.agents.personality import PersonalityDistribution
 from swarm.core.world import Position, World
 
 

@@ -56,17 +56,11 @@ Reply with EXACTLY one line in this format:
 - |               : a literal pipe character separating reasoning from choice.
 - <action index>  : the integer index of your chosen action (e.g. 0, 1, 2 …).
 
-Example response:
-The exit is to the east and the hazard is approaching from the north, so I move east. | 3
-
 Rules:
 - Output ONLY one line.  No extra text, no markdown, no JSON.
 - The index MUST match one of the options shown under "Available Actions".
 - Pick the SINGLE best action considering cost, hazard, occupancy, and your goal.
 - If all options are bad, pick the least bad one and explain why.
-
-## Learnings from Previous Attempts
-{learnings}
 """
 
 
@@ -117,6 +111,23 @@ def get_available_moves(
     return moves
 
 
+# ── Blackboard alerts formatting ─────────────────────────────────
+
+
+def _format_alerts(alerts: dict[str, object] | None) -> str:
+    """Format active blackboard entries into a prompt section.
+
+    Returns an empty string when there are no active alerts so the
+    section is omitted entirely from the prompt.
+    """
+    if not alerts:
+        return ""
+    lines = ["## Global Alerts"]
+    for key, value in alerts.items():
+        lines.append(f"- **{key}**: {value}")
+    return "\n".join(lines) + "\n\n"
+
+
 # ── User (per-tick) message ──────────────────────────────────────────
 
 
@@ -129,18 +140,21 @@ def build_user_message(
     reasoning_history: list[tuple[int, str]],
     max_journey: int = 20,
     max_reasoning: int = 5,
+    blackboard_alerts: dict[str, object] | None = None,
 ) -> str:
     """Build the per-tick user message from perception + memory.
 
     Sections included:
     1. **Current State** — tick, position, agent state.
-    2. **Local Perception** — exit direction/distance, hazards (scalar +
+    2. **Global Alerts** — active blackboard entries (fire alarm, evacuation
+       orders, etc.).
+    3. **Local Perception** — exit direction/distance, hazards (scalar +
        lobes + trend), nearby agents, flow suggestion.
-    3. **Available Actions** — numbered list with cost/hazard/occupancy per
+    4. **Available Actions** — numbered list with cost/hazard/occupancy per
        cell, plus warning flags.
-    4. **Journey History** — last *max_journey* (tick, position) pairs so
+    5. **Journey History** — last *max_journey* (tick, position) pairs so
        the LLM can detect loops / backtracking.
-    5. **Previous Reasoning** — last *max_reasoning* reasoning strings so
+    6. **Previous Reasoning** — last *max_reasoning* reasoning strings so
        the LLM can maintain decision continuity.
     """
 
@@ -244,6 +258,7 @@ def build_user_message(
         f"- Position: ({x}, {y})\n"
         f"- State: {state}\n"
         f"\n"
+        f"{_format_alerts(blackboard_alerts)}"
         f"## Local Perception\n"
         f"{perception_text}\n"
         f"\n"
