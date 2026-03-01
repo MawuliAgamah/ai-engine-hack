@@ -20,6 +20,8 @@ separated pair that is cheap to generate and trivial to parse.
 
 from __future__ import annotations
 
+import random
+
 from swarm.agents.perception import LocalPercept
 from swarm.core.world import Position
 
@@ -111,6 +113,7 @@ def get_available_moves(
     for nb in percept.walkable_neighbors:
         if nb != percept.position:
             moves.append(("MOVE to", nb))
+    random.shuffle(moves)  # randomize order to avoid positional bias in LLM choices
     return moves
 
 

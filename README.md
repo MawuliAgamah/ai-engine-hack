@@ -85,7 +85,8 @@ Think of it as the intersection of:
 
 ```bash
 pixi install
-pixi run python -m sim.web --host 127.0.0.1 --port 8765 --steps 10 --num-agents 2 --seed 42
+pixi run python -m sim.web --host 127.0.0.1 --port 8765 --steps 120 --num-agents 50 --seed 42 # with Mock Client that makes random moves
+pixi run python -m sim.web --host 127.0.0.1 --port 8765 --steps 10 --num-agents 2 --seed 2026 --use-llm # with LLM Client
 ```
 
 ## Key Design Principles

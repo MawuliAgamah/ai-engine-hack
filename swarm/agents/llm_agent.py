@@ -152,9 +152,14 @@ class LLMAgent:
 
     # ── Phase 2: DECIDE (LLM call) ───────────────────────────────
 
-    def decide(self, percept: LocalPercept, tick: int) -> LLMDecision:
-        """Build the prompt, call the LLM, and parse the response."""
+    def build_messages(
+        self, percept: LocalPercept, tick: int
+    ) -> tuple[list[dict[str, str]], list[Position]]:
+        """Build the LLM messages and available-position list.
 
+        Returns ``(messages, available_positions)`` so that callers can
+        collect messages from many agents and send them in a single batch.
+        """
         available_labeled = get_available_moves(percept)
         available_positions = [pos for _, pos in available_labeled]
 
@@ -173,13 +178,32 @@ class LLMAgent:
             {"role": "system", "content": self._system_prompt},
             {"role": "user", "content": user_message},
         ]
+        return messages, available_positions
 
-        response_text = self.client.complete(messages, agent_id=self.id)
-
+    def parse_decision(
+        self,
+        response_text: str,
+        available_positions: list[Position],
+        fallback: Position,
+    ) -> LLMDecision:
+        """Parse a raw LLM response into an ``LLMDecision``."""
         return parse_llm_response(
             response_text=response_text,
             available=available_positions,
-            fallback=percept.position,
+            fallback=fallback,
+        )
+
+    def decide(self, percept: LocalPercept, tick: int) -> LLMDecision:
+        """Build the prompt, call the LLM, and parse the response.
+
+        Convenience wrapper around ``build_messages`` → LLM call →
+        ``parse_decision``.  For batch inference across many agents use
+        ``LLMSwarm._decide_batch`` instead.
+        """
+        messages, available_positions = self.build_messages(percept, tick)
+        response_text = self.client.complete(messages, agent_id=self.id)
+        return self.parse_decision(
+            response_text, available_positions, percept.position
         )
 
     # ── Phase 3: EXECUTE + UPDATE ─────────────────────────────────

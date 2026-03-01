@@ -127,13 +127,42 @@ class LLMSwarm:
         agent_percepts: dict[int, tuple[LLMAgent, object]],
         tick: int,
     ) -> dict[int, object]:
-        """Call the LLM for each agent.  Override for async/batched calls."""
+        """Build all prompts, call the LLM in a single batch, parse results.
+
+        This gathers messages from every agent first, sends them all
+        through ``client.complete_batch`` (which may execute concurrently
+        on a GPU inference server), and then parses all responses.
+        """
         from swarm.agents.perception import LocalPercept  # avoid circular
 
-        decisions = {}
+        # ── Build all messages (CPU-only) ─────────────────────────
+        ordered_ids: list[int] = []
+        all_messages: list[list[dict[str, str]]] = []
+        all_available: list[list[Position]] = []
+        all_fallbacks: list[Position] = []
+
         for aid, (agent, percept) in agent_percepts.items():
             assert isinstance(percept, LocalPercept)
-            decisions[aid] = agent.decide(percept, tick)
+            messages, available = agent.build_messages(percept, tick)
+            ordered_ids.append(aid)
+            all_messages.append(messages)
+            all_available.append(available)
+            all_fallbacks.append(percept.position)
+
+        if not ordered_ids:
+            return {}
+
+        # ── Batch LLM call (GPU / network) ────────────────────────
+        responses = self.client.complete_batch(all_messages)
+
+        # ── Parse all responses (CPU-only) ────────────────────────
+        decisions: dict[int, object] = {}
+        for aid, resp, avail, fb in zip(
+            ordered_ids, responses, all_available, all_fallbacks
+        ):
+            agent = agent_percepts[aid][0]
+            decisions[aid] = agent.parse_decision(resp, avail, fb)
+
         return decisions
 
     # ── Statistics (engine-compatible) ────────────────────────────

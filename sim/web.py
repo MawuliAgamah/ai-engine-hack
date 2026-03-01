@@ -362,6 +362,12 @@ HTML_PAGE = r"""<!doctype html>
     };
 
     window.addEventListener('resize', drawWorld);
+    // Populate inputs from server config
+    fetch('/api/config').then(r => r.json()).then(cfg => {
+      if (cfg.num_agents) document.getElementById('num_agents').value = cfg.num_agents;
+      if (cfg.steps)      document.getElementById('steps').value = cfg.steps;
+      if (cfg.seed != null) document.getElementById('seed').value = cfg.seed;
+    });
     drawLegend();
     fetchStatic().then(pollState);
   </script>

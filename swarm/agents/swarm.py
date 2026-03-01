@@ -96,7 +96,6 @@ class Swarm:
 
         return created
 
-    # TODO: make async version of this for parallel stepping
     def step_all(self, world: World, tick: int) -> None:
         """
         Step all active agents for one tick.

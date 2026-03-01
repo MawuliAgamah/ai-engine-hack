@@ -8,23 +8,27 @@ viewer queries for state snapshots.
 
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from dotenv import load_dotenv
 
-from swarm.agents.base import AgentState
 from swarm.agents.llm_agent import LLMAgent
 from swarm.agents.llm_swarm import LLMSwarm
 from swarm.core.clock import Clock
-from swarm.core.engine import SimulationEngine
 from swarm.core.events import EventScheduler
-from swarm.core.world import Position, Terrain, World
+from swarm.core.world import Terrain, World
 from swarm.llm.client import LLMClient, MockClient
 from swarm.shared.blackboard import Blackboard
 from swarm.shared.fields import FieldManager
 from swarm.shared.pheromones import PheromoneSystem
+
+load_dotenv()  # Load .env file from project root
+
+logger = logging.getLogger(__name__)
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -42,7 +46,7 @@ class SimConfig:
     scenario: str = "A fire has broken out in the building. Evacuate immediately."
     goal: str = "Reach the nearest exit and evacuate safely."
     personality: str = "You are a cautious pedestrian who prefers safe, uncrowded routes."
-    awareness_radius: float = 8.0
+    awareness_radius: float = 1.0
     use_llm: bool = False  # If True and API_KEY is set, use real LLM
 
     def to_dict(self) -> dict[str, Any]:
@@ -243,17 +247,7 @@ class SwarmModel:
             self.world.add_layer("hazard_prev", default=0.0)
         self.fields.update(0, force=True)
 
-    @staticmethod
-    def _make_client(config: SimConfig) -> LLMClient:
-        if config.use_llm:
-            import os
-            api_key = os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
-            if api_key:
-                from swarm.llm.client import OpenAIClient
-                return OpenAIClient()
-        return MockClient(strategy="first_move")
-
-    # ── Step ──────────────────────────────────────────────────────
+    # ── Step ──────────────────────────────────────────────────
 
     def step(self) -> None:
         """Advance the simulation by one tick."""
@@ -285,6 +279,21 @@ class SwarmModel:
         stats = self.swarm.get_stats()
         if tick >= self.config.steps or stats.active == 0:
             self.running = False
+
+    @staticmethod
+    def _make_client(config: SimConfig) -> LLMClient:
+        if config.use_llm:
+            import os
+            api_key = os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
+            if api_key:
+                from swarm.llm.client import OpenAIClient
+                logger.info("Using OpenAIClient (model=%s, base_url=https://api.doubleword.ai/v1)", OpenAIClient.__init__.__defaults__[0])
+                return OpenAIClient()
+            else:
+                logger.warning("use_llm=True but no API_KEY or OPENAI_API_KEY found — falling back to MockClient")
+        else:
+            logger.info("use_llm=False — using MockClient (strategy=first_move)")
+        return MockClient(strategy="first_move")
 
     # ── Queries (for web viewer) ─────────────────────────────────
 
