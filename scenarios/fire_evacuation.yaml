@@ -1,68 +1,79 @@
 # Fire Evacuation Scenario
 # ========================
-# A multi-room office building with a fire breaking out.
-# Agents must navigate to exits while avoiding spreading flames.
+# Fire breaks out in central Southwark.
 
-agents:
-  seed: 42
-  groups:
-    # Office workers in left wing
-    - count: 80
-      spawn_area: { x: 2, y: 2, w: 37, h: 32 }
-      personality:
-        speed_mean: 1.0
-        speed_std: 0.15
-        risk_alpha: 2.0
-        risk_beta: 5.0
-        panic_low: 0.4
-        panic_high: 0.7
-
-    # Office workers in middle section
-    - count: 60
-      spawn_area: { x: 42, y: 2, w: 37, h: 32 }
-      personality:
-        speed_mean: 1.1
-        speed_std: 0.2
-        risk_alpha: 3.0
-        risk_beta: 4.0
-        panic_low: 0.3
-        panic_high: 0.6
-
-    # Office workers in right wing
-    - count: 60
-      spawn_area: { x: 82, y: 2, w: 36, h: 32 }
-      personality:
-        speed_mean: 0.9
-        speed_std: 0.25
-        risk_alpha: 2.0
-        risk_beta: 6.0
-        panic_low: 0.5
-        panic_high: 0.9
-
-hazards:
-  # Primary fire — wind-driven spread toward the south-east
-  - type: fire
-    origin: { x: 60, y: 20 }
-    start_tick: 50
-    intensity: 0.9
-    spread_rate: 0.03
-    spread_radius: 30
-    duration: 0  # indefinite
-    spread_direction:
-      - { angle: 135, strength: 0.6 }   # SE lobe (dominant wind)
-      - { angle: 180, strength: 0.2 }   # minor southward drift
-
-  # Secondary fire — uniform radial (no wind bias)
-  - type: fire
-    origin: { x: 65, y: 25 }
-    start_tick: 200
-    intensity: 0.7
-    spread_rate: 0.02
-    spread_radius: 20
-    duration: 0
-    # spread_direction omitted → defaults to isotropic
+scenario:
+  name: fire_evacuation
+  description: >
+    A fire breaks out near the centre of Southwark. Agents must
+    evacuate to safety at the edges of the area.
+  scenario_text: >
+    A fire has broken out in central Southwark! Evacuate immediately
+    to the edge of the area. Avoid smoke and flames.
+  goal: Evacuate to the nearest exit. Avoid fire and smoke.
 
 simulation:
+  steps: 300
+  seed: 42
   dt: 0.1
-  max_ticks: 3000
-  field_update_interval: 15
+  awareness_radius: 2.0
+  use_llm: true
+  interval_ms: 250
+
+world:
+  data_path: reference_data/southwark_reference_data_table.parquet.gzip
+  num_exits: 8
+
+agents:
+  groups:
+    - count: 12
+      name: office_worker
+      description: >
+        You are an office worker. You are familiar with the area and
+        move quickly. You tend to be calm under pressure.
+      goal: Evacuate to the nearest exit immediately.
+
+    - count: 8
+      name: tourist
+      description: >
+        You are a tourist unfamiliar with the area. You are confused
+        and tend to follow the crowd.
+      goal: Find safety. Follow others who seem to know where they are going.
+
+    - count: 5
+      name: elderly
+      description: >
+        You are elderly and move slowly. You are cautious and
+        frightened by the fire.
+      goal: Evacuate carefully, avoiding the fire at all costs.
+
+pheromones:
+  - name: visited
+    decay_rate: 0.02
+    diffusion_rate: 0.05
+    max_value: 50.0
+  - name: danger
+    decay_rate: 0.05
+    diffusion_rate: 0.25
+    max_value: 100.0
+
+hazards:
+  - type: fire
+    origin: { x: 12, y: 17 }
+    start_tick: 20
+    intensity: 0.9
+    spread_rate: 0.03
+    spread_radius: 12
+    duration: 0
+    spread_direction:
+      - { angle: 135, strength: 0.5 }
+
+  - type: fire
+    origin: { x: 14, y: 15 }
+    start_tick: 80
+    intensity: 0.7
+    spread_rate: 0.02
+    spread_radius: 8
+    duration: 0
+
+events: []

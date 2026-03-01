@@ -1,53 +1,73 @@
 # Event Congestion Scenario
 # =========================
-# Large outdoor event (concert/festival) in a park.
-# Simulates crowd ingress, congestion pinch-points, and emergency evacuation.
+# Large outdoor event in Southwark causes crowd congestion.
 
-agents:
-  seed: 256
-  groups:
-    # General crowd near stage
-    - count: 300
-      spawn_area: { x: 30, y: 22, w: 120, h: 35 }
-      personality:
-        speed_mean: 0.8
-        speed_std: 0.2
-        panic_low: 0.3
-        panic_high: 0.6
-        herding_alpha: 5.0
-        herding_beta: 2.0
-
-    # Crowd in back areas
-    - count: 150
-      spawn_area: { x: 10, y: 65, w: 160, h: 40 }
-      personality:
-        speed_mean: 1.0
-        speed_std: 0.25
-        panic_low: 0.4
-        panic_high: 0.75
-
-    # VIP / staff (faster, calmer)
-    - count: 30
-      spawn_area: { x: 60, y: 5, w: 60, h: 15 }
-      personality:
-        speed_mean: 1.3
-        speed_std: 0.1
-        panic_low: 0.7
-        panic_high: 0.95
-        risk_alpha: 4.0
-        risk_beta: 2.0
-
-hazards:
-  # Crowd crush / stampede trigger (modeled as gas/pressure)
-  - type: gas
-    origin: { x: 90, y: 35 }
-    start_tick: 500
-    intensity: 0.6
-    spread_rate: 0.04
-    spread_radius: 25
-    duration: 200
+scenario:
+  name: event_congestion
+  description: >
+    A large outdoor event in central Southwark draws big crowds.
+    A sudden incident triggers panic.
+  scenario_text: >
+    You are attending a large outdoor event in Southwark. The area
+    is very crowded. An incident has occurred — there may be danger.
+  goal: Leave the event area safely. Avoid stampede and congestion.
 
 simulation:
+  steps: 300
+  seed: 256
   dt: 0.1
-  max_ticks: 4000
-  field_update_interval: 20
+  awareness_radius: 1.5
+  use_llm: true
+  interval_ms: 250
+
+world:
+  data_path: reference_data/southwark_reference_data_table.parquet.gzip
+  num_exits: 6
+
+agents:
+  groups:
+    - count: 15
+      name: attendee
+      description: >
+        You are attending the event and are in the thick of the
+        crowd. You tend to follow others around you.
+      goal: Leave the event area as safely and quickly as possible.
+
+    - count: 8
+      name: bystander
+      description: >
+        You are a bystander nearby who got caught up in the crowd.
+        You want to get away from the congestion.
+      goal: Move away from the crowd and find a clear path out.
+
+    - count: 3
+      name: steward
+      description: >
+        You are an event steward. You stay calm under pressure and
+        try to guide people to safety. You move deliberately.
+      goal: Help direct people toward exits. Stay calm and guide others.
+
+pheromones:
+  - name: visited
+    decay_rate: 0.02
+    diffusion_rate: 0.05
+    max_value: 50.0
+  - name: congestion
+    decay_rate: 0.1
+    diffusion_rate: 0.15
+    max_value: 50.0
+  - name: danger
+    decay_rate: 0.08
+    diffusion_rate: 0.2
+    max_value: 100.0
+
+hazards:
+  - type: gas
+    origin: { x: 12, y: 18 }
+    start_tick: 50
+    intensity: 0.6
+    spread_rate: 0.04
+    spread_radius: 10
+    duration: 150
+
+events: []
