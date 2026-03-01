@@ -153,7 +153,12 @@ def summarise_generation(
     logger.info("Calling LLM for generational summary (%d agents)…", len(agents))
     response = client.complete(messages)
     logger.info("Generational summary received (%d chars)", len(response))
-    return response.strip()
+
+    # Post-process (change "Agents" to "People")    
+    response = response.strip()
+    response = response.replace("Agents", "People")
+
+    return response
 
 
 def save_learnings(scenario_name: str, text: str) -> Path:
