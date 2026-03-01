@@ -87,7 +87,57 @@ class OpenAIClient(LLMClient):
         )
         return resp.choices[0].message.content.strip() or ""
 
-# ── Mock (for testing) ───────────────────────────────────────────────
+
+# ── BrevLab ──────────────────────────────────────────────────────────
+
+class BrevLabClient(LLMClient):
+    """BrevLab-compatible Chat Completions client (for testing/dev).
+
+    Uses requests to POST to BrevLab endpoint.
+    """
+    def __init__(
+        self,
+        url: str = "https://5000-3ioskhaih.brevlab.com/v1/chat/completions",
+        model: str = "nemotron",
+        max_tokens: int = 512,
+        timeout: int = 60,
+    ):
+        self.url = url
+        self.model = model
+        self.max_tokens = max_tokens
+        self.timeout = timeout
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        agent_id: int | None = None,
+    ) -> str:
+        import requests
+        import json
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+        }
+        try:
+            resp = requests.post(
+                self.url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            logger.error(f"BrevLab request failed: {e}")
+            raise SystemExit(f"Request failed: {e}")
+        data = resp.json()
+        # Expect OpenAI-like response structure
+        try:
+            return data["choices"][0]["message"]["content"].strip() or ""
+        except Exception:
+            logger.error(f"Unexpected BrevLab response: {data}")
+            return ""
 
 
 class MockClient(LLMClient):
