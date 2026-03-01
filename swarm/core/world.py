@@ -16,61 +16,116 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Iterator
+from typing import Iterator, Union
+from collections import deque
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy.ndimage import uniform_filter, maximum_filter
+import pandas as pd
+import h3
 
+LANDUSE = {
+    'allotments', 'apiary', 'brownfield', 'cemetery', 'commercial', 'construction', 'depot', 
+    'farmland', 'farmyard', 'flowerbed', 'forest', 'grass', 'industrial', 'meadow', 'military', 
+    'mixed', 'orchard', 'platform', 'railway', 'recreation_ground', 'religious', 'residential', 
+    'retail', 'traffic_island', 'village_green'
+}
+
+LEISURE = {
+    'bandstand', 'bleachers', 'dance', 'dog_park', 'fitness_centre', 'fitness_station', 'garden', 
+    'golf_course', 'marina', 'nature_reserve', 'nets', 'outdoor_seating', 'park', 'pitch', 
+    'playground', 'schoolyard', 'slipway', 'sports_centre', 'stadium', 'swimming_pool', 
+    'tanning_salon', 'track'
+}
+
+NATURE = {
+    'beach', 'grass', 'mud', 'scru', 'shrubbery', 'tree_row', 'water', 'wetland', 'wood'
+}
+
+ROADS = {
+    'cycleway', 'footway', 'primary', 'residential', 'secondary', 'service', 'tertiary', 'unclassified'
+}
 
 class Terrain(enum.IntEnum):
     """Terrain types that define the base character of each cell."""
+    OPEN = 0  # Default open terrain (sidewalks, parks, etc.)
+    EXIT = 100  # Special terrain type for exits/goals
+    OBSTACLE = 101  # Impassable terrain (walls, buildings, etc.)
+    WATER = 102  # Impassable water bodies (rivers, lakes, etc.)  ## TODO: hex can never be 100% water
 
-    OPEN = 0          # Open space (plaza, field)
-    CORRIDOR = 1      # Indoor corridor
-    ROAD = 2          # Vehicle road
-    SIDEWALK = 3      # Pedestrian sidewalk
-    STAIRS = 4        # Stairway (higher cost)
-    DOOR = 5          # Doorway (bottleneck)
-    EXIT = 6          # Exit / evacuation target
-    WALL = 7          # Impassable wall
-    WATER = 8         # Water body (flood modeling)
-    BUILDING = 9      # Building interior
-    OBSTACLE = 10     # Impassable obstacle (furniture, barrier)
-    GRASS = 11        # Grass / park (walkable, slightly slower)
-
-
-# Base movement cost multipliers per terrain type
-TERRAIN_COSTS: dict[Terrain, float] = {
-    Terrain.OPEN: 1.0,
-    Terrain.CORRIDOR: 1.0,
-    Terrain.ROAD: 0.8,
-    Terrain.SIDEWALK: 1.0,
-    Terrain.STAIRS: 2.5,
-    Terrain.DOOR: 1.5,
-    Terrain.EXIT: 0.5,
-    Terrain.WALL: np.inf,
-    Terrain.WATER: np.inf,
-    Terrain.BUILDING: np.inf,
-    Terrain.OBSTACLE: np.inf,
-    Terrain.GRASS: 1.3,
+TRAVERSABILITY_RATINGS = {
+    "LANDUSE": {
+        "allotments": 0.40,
+        "apiary": 0.55,
+        "brownfield": 0.65,
+        "cemetery": 0.25,
+        "commercial": 0.20,
+        "construction": 0.90,
+        "depot": 0.70,
+        "farmland": 0.50,
+        "farmyard": 0.45,
+        "flowerbed": 0.85,
+        "forest": 0.75,
+        "grass": 0.15,
+        "industrial": 0.60,
+        "meadow": 0.20,
+        "military": 1.00,
+        "mixed": 0.40,
+        "orchard": 0.45,
+        "platform": 0.10,
+        "railway": 0.95,
+        "recreation_ground": 0.15,
+        "religious": 0.20,
+        "residential": 0.20,
+        "retail": 0.20,
+        "traffic_island": 0.80,
+        "village_green": 0.10
+    },
+    "LEISURE": {
+        "bandstand": 0.70,
+        "bleachers": 0.85,
+        "dance": 0.10,
+        "dog_park": 0.20,
+        "fitness_centre": 0.15,
+        "fitness_station": 0.35,
+        "garden": 0.40,
+        "golf_course": 0.35,
+        "marina": 0.95,
+        "nature_reserve": 0.65,
+        "nets": 0.60,
+        "outdoor_seating": 0.45,
+        "park": 0.10,
+        "pitch": 0.20,
+        "playground": 0.35,
+        "schoolyard": 0.20,
+        "slipway": 0.55,
+        "sports_centre": 0.20,
+        "stadium": 0.50,
+        "swimming_pool": 1.00,
+        "tanning_salon": 0.10,
+        "track": 0.05
+    },
+    "NATURE": {
+        "beach": 0.45,
+        "grass": 0.10,
+        "mud": 0.80,
+        "scru": 0.70,
+        "shrubbery": 0.85,
+        "tree_row": 0.60,
+        "water": 1.00,
+        "wetland": 0.95,
+        "wood": 0.75
+    }
 }
 
-# Whether terrain is walkable by default
-TERRAIN_WALKABLE: dict[Terrain, bool] = {
-    Terrain.OPEN: True,
-    Terrain.CORRIDOR: True,
-    Terrain.ROAD: True,
-    Terrain.SIDEWALK: True,
-    Terrain.STAIRS: True,
-    Terrain.DOOR: True,
-    Terrain.EXIT: True,
-    Terrain.WALL: False,
-    Terrain.WATER: False,
-    Terrain.BUILDING: False,
-    Terrain.OBSTACLE: False,
-    Terrain.GRASS: True,
-}
+def terrain_cost(osm_dict):
+    #dens = osm_dict['summary']['building_density_km_2']
+    #if pd.isna(dens): dens = osm_dict['summary']['building_density_km2']
+    out = np.mean([TRAVERSABILITY_RATINGS['LANDUSE'][l] for l in osm_dict['summary']['landuse']])
+    out *= np.mean([TRAVERSABILITY_RATINGS['LEISURE'][l] for l in osm_dict['summary']['leisure']]) if osm_dict['summary']['leisure'] else 1.0
+    out *= np.mean([TRAVERSABILITY_RATINGS['NATURE'][l] for l in osm_dict['summary']['nature']]) if osm_dict['summary']['nature'] else 1.0
+    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +149,6 @@ class Position:
 
     def as_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
-
 
 # 8-connected neighborhood offsets (Moore neighborhood)
 MOORE_OFFSETS: list[Position] = [
@@ -126,7 +180,6 @@ class Cell:
     This is the 'what it's on, what's in it, what's next to it' abstraction.
     Materialized on demand from the underlying NumPy arrays for detailed queries.
     """
-
     pos: Position
     terrain: Terrain
     walkable: bool
@@ -139,7 +192,7 @@ class Cell:
     @property
     def is_passable(self) -> bool:
         """Can an agent move through this cell right now?"""
-        return self.walkable and self.hazard_level < 1.0 and self.occupancy < self.max_occupancy
+        return self.hazard_level < 1.0 and self.occupancy < self.max_occupancy
 
     @property
     def effective_cost(self) -> float:
@@ -217,7 +270,6 @@ class World:
     The spatial grid world.
 
     Core data is stored in dense NumPy arrays for performance:
-    - terrain_grid: int array of Terrain enum values
     - cost_grid: float array of movement costs
     - walkable_grid: bool array
     - hazard_grid: float array [0, 1]
@@ -227,19 +279,36 @@ class World:
     Property layers are named overlays for pheromones, gradients, etc.
     """
 
-    def __init__(self, width: int, height: int):
-        self.width = width
-        self.height = height
+    def __init__(self, data: Union[str, pd.DataFrame]):
+        if isinstance(data, str):
+            if data.endswith('.csv'):
+                df = pd.read_csv(data)
+            elif data.endswith('.json'):
+                df = pd.read_json(data)
+            elif 'parquet' in data:
+                df = pd.read_parquet(data)
+            else:
+                raise ValueError(f"Unsupported file format for World constructor: {data.split('.')[-1]}")
+        elif isinstance(data, pd.DataFrame):
+            df = data
+        else:
+            raise ValueError("World constructor requires a file path or DataFrame")
+
+        df = quantise_grid(df)[['h3_index', 'latitude', 'longitude', 'osm_structured_json_dict', 'i', 'j']]
+        df['terrain_cost'] = df['osm_structured_json_dict'].apply(terrain_cost)
+        df['walkable'] = df['terrain_cost'] < 0.95  # arbitrary threshold for walkability
+        df['terrain_type'] = df['osm_structured_json_dict'].apply(terrain_type)
+
+        self.width = int(df['i'].max() + 1)
+        self.height = int(df['j'].max() + 1)
 
         # Core grids
-        self.terrain_grid: NDArray[np.int8] = np.full(
-            (height, width), Terrain.OPEN, dtype=np.int8
-        )
-        self.cost_grid: NDArray[np.float64] = np.ones((height, width), dtype=np.float64)
-        self.walkable_grid: NDArray[np.bool_] = np.ones((height, width), dtype=np.bool_)
-        self.hazard_grid: NDArray[np.float64] = np.zeros((height, width), dtype=np.float64)
-        self.elevation_grid: NDArray[np.float64] = np.zeros((height, width), dtype=np.float64)
-        self.occupancy_grid: NDArray[np.int32] = np.zeros((height, width), dtype=np.int32)
+        self.terrain_grid: NDArray[np.int32] = df.pivot_table(index='j', columns='i', values='terrain_type').sort_index(ascending=False).to_numpy(dtype = np.int32)
+        self.cost_grid: NDArray[np.float64] = df.pivot_table(index='j', columns='i', values='terrain_cost').sort_index(ascending=False).to_numpy(dtype = np.float64)
+        self.walkable_grid: NDArray[np.bool_] = df.pivot_table(index='j', columns='i', values='walkable').sort_index(ascending=False).to_numpy(dtype = np.bool_)
+        self.hazard_grid: NDArray[np.float64] = np.zeros((self.height, self.width), dtype=np.float64)
+        self.elevation_grid: NDArray[np.float64] = np.zeros((self.height, self.width), dtype=np.float64)
+        self.occupancy_grid: NDArray[np.int32] = np.zeros((self.height, self.width), dtype=np.int32)
 
         # Agent tracking: maps (x, y) → set of agent IDs
         self._agents_at: dict[tuple[int, int], set[int]] = {}
@@ -249,14 +318,15 @@ class World:
 
         # Exit positions for pathfinding
         self.exits: list[Position] = []
+        
 
     # ── Grid construction ───────────────────────────────────────────
 
     def set_terrain(self, x: int, y: int, terrain: Terrain) -> None:
         """Set terrain type for a cell, auto-updating cost and walkability."""
-        self.terrain_grid[y, x] = terrain
-        self.cost_grid[y, x] = TERRAIN_COSTS[terrain]
-        self.walkable_grid[y, x] = TERRAIN_WALKABLE[terrain]
+        self.terrain_grid[y, x] = terrain.value
+        self.cost_grid[y, x] = terrain_cost[terrain]
+        self.walkable_grid[y, x] = True if terrain_cost[terrain] < 0.95 else False  # will always be True
         if terrain == Terrain.EXIT:
             pos = Position(x, y)
             if pos not in self.exits:
@@ -293,7 +363,7 @@ class World:
                 result.append(Position(nx, ny))
         return result
 
-    def walkable_neighbors(self, x: int, y: int, moore: bool = True) -> list[Position]:
+    def walkable_neighbors(self, x: int, y: int) -> list[Position]:
         """Get walkable neighboring positions (also checks hazard passability)."""
         offsets = HEX_OFFSETS # potentially could use Moore or Von Neumann
         result = []
@@ -315,7 +385,6 @@ class World:
         agent_ids = list(self._agents_at.get((x, y), set()))
         return Cell(
             pos=pos,
-            terrain=Terrain(self.terrain_grid[y, x]),
             walkable=bool(self.walkable_grid[y, x]),
             cost=float(self.cost_grid[y, x]),
             hazard_level=float(self.hazard_grid[y, x]),
@@ -419,3 +488,122 @@ class World:
 
     def __repr__(self) -> str:
         return f"World({self.width}x{self.height}, exits={len(self.exits)}, layers={list(self._layers.keys())})"
+
+
+### h3 grid quantisation helpers (for converting lat/lon to grid coordinates)
+
+def geo_bearing(lat1, lon1, lat2, lon2):
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    x = math.sin(dlon) * math.cos(lat2)
+    y = (math.cos(lat1) * math.sin(lat2)
+        - math.sin(lat1) * math.cos(lat2) * math.cos(dlon))
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+def bearing_to_offset(b):
+    for lo, hi, di, dj in BEARING_OFFSETS:
+        if lo <= b < hi:
+            return di, dj
+    raise ValueError(f"Bearing {b:.1f} not matched by any bin")
+
+def neighbour_offsets(h3_ind):
+    """Return list of (neighbour_cell, di, dj) for all 6 ring-1 neighbours."""
+    clat, clon = h3.cell_to_latlng(h3_ind)
+    result = []
+    for nb in h3.grid_ring(h3_ind, 1):
+        nlat, nlon = h3.cell_to_latlng(nb)
+        b = geo_bearing(clat, clon, nlat, nlon)
+        di, dj = bearing_to_offset(b)
+        result.append((nb, di, dj))
+    return result
+
+def quantise_grid(df):
+
+    valid_cells = set(df["h3_index"].values)
+
+    # ---------------------------------------------------------------------------
+    # Find origin: min longitude, tiebreak min latitude
+    origin_row = df.sort_values(["longitude", "latitude"]).iloc[0]
+    origin_cell = origin_row["h3_index"]
+
+    # Bearing -> (di, dj) offset
+    # Bins verified empirically from the hex geometry (res-9 in London).
+    BEARING_OFFSETS = [
+        (  0,  60, +1, +1),   # NE  ~31.3
+        ( 60, 110, +1,  0),   # E   ~87.4
+        (110, 180, +1, -1),   # SE  ~130.4
+        (290, 360, -1, +1),   # NW  ~310.4
+        (240, 290, -1,  0),   # W   ~267.4
+        (180, 240, -1, -1),   # SW  ~211.3
+    ]
+
+    
+
+    # Bounding box (with buffer) to constrain BFS expansion.
+    # Without this the BFS expands infinitely across all H3 cells globally.
+    # A one-cell buffer (~0.005 deg) ensures relay nodes just outside the data
+    # extent are still reachable to bridge gaps between dataset cells.
+    BUFFER = 0.005
+    lat_min = df.latitude.min() - BUFFER
+    lat_max = df.latitude.max() + BUFFER
+    lon_min = df.longitude.min() - BUFFER
+    lon_max = df.longitude.max() + BUFFER
+
+    def in_bounds(cell):
+        lat, lon = h3.cell_to_latlng(cell)
+        return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
+
+    # BFS - traverses through ALL in-bounds cells as relay nodes.
+    # (i, j) is only recorded for cells that exist in valid_cells.
+    cell_to_ij = {origin_cell: (0, 0)}
+    visited = {origin_cell}
+    queue = deque([origin_cell])
+
+    count = 0
+    while queue:
+        
+        current = queue.pop()
+        ci, cj = cell_to_ij[current]
+
+        for nb_cell, di, dj in neighbour_offsets(current):
+            if nb_cell in visited:
+                continue
+            if not in_bounds(nb_cell):     # stop expanding beyond the dataset extent
+                continue
+            visited.add(nb_cell)
+
+            nb_ij = (ci + di, cj + dj)
+            cell_to_ij[nb_cell] = nb_ij   # store for ALL cells so relay nodes work
+            queue.append(nb_cell)          # traverse through non-dataset cells too
+            count += 1
+
+    # Write (i, j) to dataframe - only for cells in the dataset
+    df["i"] = df["h3_index"].map(lambda c: cell_to_ij.get(c, (None, None))[0]).astype("Int64")
+    df["j"] = df["h3_index"].map(lambda c: cell_to_ij.get(c, (None, None))[1]).astype("Int64")
+    return df
+
+### Terrain cost calculation based on OSM metadata
+def terrain_cost(osm_dict):
+    #dens = osm_dict['summary']['building_density_km_2']
+    #if pd.isna(dens): dens = osm_dict['summary']['building_density_km2']
+    if len(osm_dict['summary']['landuse']) == 0 and len(osm_dict['summary']['leisure']) == 0 and len(osm_dict['summary']['natural']) == 0:
+        return 0.5
+    return np.concatenate((
+        [TRAVERSABILITY_RATINGS['LANDUSE'][l] for l in osm_dict['summary']['landuse']],
+        [TRAVERSABILITY_RATINGS['LEISURE'][l] for l in osm_dict['summary']['leisure']],
+        [TRAVERSABILITY_RATINGS['NATURE'][l] for l in osm_dict['summary']['natural']]
+        )
+    ).mean()
+
+def terrain_type(osm_dict):
+    luses = np.concatenate((
+        osm_dict['summary']['landuse'],
+        osm_dict['summary']['leisure'],
+        osm_dict['summary']['natural']
+    ))
+    if len(luses) == 0:
+        return Terrain.OPEN
+    elif len(luses) == 1 and luses[0] == 'water':
+        return Terrain.WATER
+    else:
+        return Terrain.OPEN
