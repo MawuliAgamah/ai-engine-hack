@@ -167,9 +167,10 @@ class LLMSwarm:
             except Exception as exc:
                 logger.warning("Agent %d decision failed: %s", aid, exc)
                 # Fall back to staying in place
+                fallback_available = available if 'available' in dir() else [("STAY at", percept.position)]
                 decisions[aid] = agent.parse_decision(
                     "Error fallback — staying put | 0",
-                    available,
+                    fallback_available,
                     percept.position,
                 )
 
