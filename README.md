@@ -10,18 +10,32 @@ Think of it as the intersection of:
 - **Agent-Based Modeling** (Mesa, NetLogo) — but with ML-enhanced decisions
 - **Swarm Intelligence** (Boids, ACO, PSO) — but with shared spatial memory
 - **Operations Research** (A*, simulated annealing) — but distributed across agents
-- **Multi-Agent Reinforcement Learning** — but grounded in physical space
+- **Multi-Agent, Multi-Generational Reinforcement Learning** — but grounded in physical space
 
 ## Use Cases
 
 | Scenario | What It Models |
 |----------|---------------|
-| 🔥 Fire Evacuation | Agents flee a spreading hazard through corridors with panic dynamics |
 | 🌊 Flood Response | Rising water levels reshape passable terrain in real-time |
+| 🔥 Fire Evacuation | Agents flee a spreading hazard through corridors with panic dynamics |
 | 🚗 Traffic Flow | Vehicles as agents on road networks, finding chokepoints |
 | 🏗️ Construction Impact | Block areas and measure walkability/transit degradation |
 | 🎪 Event Congestion | Concert/festival crowds straining infrastructure |
 | 🏥 Emergency Response | Ambulance routing through dynamic traffic |
+
+## Flood Response Demo
+
+<p align="center">
+  <img src="learnings/first-gen-flood.gif" alt="First Generation Flood Response" width="400" />
+  <br>
+  <em>First Generation Flood Response</em>
+</p>
+
+<p align="center">
+  <img src="learnings/second-gen-flood.gif" alt="Second Generation Flood Response" width="400" />
+  <br>
+  <em>Second Generation Flood Response</em>
+</p>
 
 ## Architecture
 
