@@ -164,22 +164,18 @@ HTML_PAGE = r"""<!doctype html>
     </section>
 
     <aside class="card">
+      <div class="inputs">
+        <label>Agents<input id="num_agents" type="number" value="20"></label>
+        <label>Steps<input id="steps" type="number" value="120"></label>
+        <label>Seed<input id="seed" type="number" value="42"></label>
+        <label>Interval ms<input id="interval_ms" type="number" value="250"></label>
+      </div>
+
       <div class="stats">
         <div class="stat"><span class="k">Tick</span><span class="v" id="tick">0</span></div>
         <div class="stat"><span class="k">Running</span><span class="v" id="running">No</span></div>
         <div class="stat"><span class="k">Active</span><span class="v" id="active">0</span></div>
-        <div class="stat"><span class="k">Evacuated</span><span class="v" id="evacuated">0</span></div>
-        <div class="stat"><span class="k">Dead</span><span class="v" id="dead">0</span></div>
-        <div class="stat"><span class="k">Stuck</span><span class="v" id="stuck">0</span></div>
-        <div class="stat"><span class="k">Panicking</span><span class="v" id="panicking">0</span></div>
         <div class="stat"><span class="k">Mean Speed</span><span class="v" id="mean_speed">0</span></div>
-      </div>
-
-      <div class="inputs">
-        <label>Num Agents <input type="number" id="num_agents" min="1" step="1" value="20"></label>
-        <label>Max Steps <input type="number" id="steps" min="1" step="1" value="120"></label>
-        <label>Seed <input type="number" id="seed" step="1" value="2026"></label>
-        <label>Interval (ms) <input type="number" id="interval_ms" min="40" step="10" value="250"></label>
       </div>
 
       <div class="legend" id="legend"></div>
@@ -189,18 +185,11 @@ HTML_PAGE = r"""<!doctype html>
 
   <script>
     const terrainColors = {
-      'open':      '#e8e8e8',
-      'corridor':  '#d9cfc0',
-      'road':      '#888888',
-      'sidewalk':  '#c8bda8',
-      'stairs':    '#a07848',
-      'door':      '#e8a040',
-      'exit':      '#22cc44',
-      'wall':      '#2a2a2a',
-      'water':     '#3f82e0',
-      'building':  '#7a4a3a',
-      'obstacle':  '#555555',
-      'grass':     '#5aaf5a'
+      'open':      '#e8dcc8',
+      'nature':    '#7bc47f',
+      'water':     '#5b9bd5',
+      'exit':      '#f5c542',
+      'obstacle':  '#6b6b6b'
     };
 
     const stateColors = {
@@ -232,22 +221,57 @@ HTML_PAGE = r"""<!doctype html>
 
     function drawWorld() {
       if (!staticData.width || !staticData.height) return;
+
+      // Hex cell sizing — pointy-top hexagons
       const maxH = window.innerHeight - 160;
-      const cell = Math.max(6, Math.min(
-        Math.floor(maxH / staticData.height),
-        Math.floor((window.innerWidth * 0.6) / staticData.width)
-      ));
-      canvas.width = staticData.width * cell;
-      canvas.height = staticData.height * cell;
+      const maxW = window.innerWidth * 0.6;
+      // hex geometry: width = sqrt(3)*size, height = 2*size
+      // Total canvas: W = sqrt(3)*size*(width) + sqrt(3)/2*size, H = 1.5*size*(height) + 0.5*size
+      const sizeByH = maxH / (1.5 * staticData.height + 0.5);
+      const sizeByW = maxW / (Math.sqrt(3) * (staticData.width + 0.5));
+      const size = Math.max(4, Math.min(sizeByH, sizeByW));
+      const hexW = Math.sqrt(3) * size;
+      const hexH = 2 * size;
+
+      canvas.width = Math.ceil(hexW * (staticData.width + 0.5));
+      canvas.height = Math.ceil(size * (1.5 * staticData.height + 0.5));
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      function hexCenter(gx, gy) {
+        // gy=0 is south (bottom), gy=height-1 is north (top)
+        // Flip for screen: screen_row = height-1-gy
+        const screenRow = staticData.height - 1 - gy;
+        const xOff = (screenRow % 2 === 1) ? hexW / 2 : 0;
+        const cx = gx * hexW + hexW / 2 + xOff;
+        const cy = screenRow * size * 1.5 + size;
+        return [cx, cy];
+      }
+
+      function drawHex(cx, cy) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = Math.PI / 180 * (60 * i - 30);
+          const hx = cx + size * Math.cos(angle);
+          const hy = cy + size * Math.sin(angle);
+          if (i === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+      }
+
       // Draw patches
       for (const patch of staticData.patches) {
-        const drawY = (staticData.height - 1 - patch.y) * cell;
-        let color = terrainColors[patch.terrain] || terrainColors['open'];
+        // Skip invalid (empty) cells — draw them as dark void
+        const [cx, cy] = hexCenter(patch.x, patch.y);
+        let color;
+        if (!patch.valid) {
+          color = '#1a1a2e';
+        } else {
+          color = terrainColors[patch.terrain] || terrainColors['open'];
+        }
         // Tint hazard
-        if (currentState && currentState.hazards) {
+        if (patch.valid && currentState && currentState.hazards) {
           const key = `${patch.x},${patch.y}`;
           const hz = currentState.hazards[key] || 0;
           if (hz > 0.01) {
@@ -255,39 +279,32 @@ HTML_PAGE = r"""<!doctype html>
             const r = parseInt(color.slice(1,3), 16);
             const g = parseInt(color.slice(3,5), 16);
             const b = parseInt(color.slice(5,7), 16);
-            const nr = Math.round(r + (220 - r) * t);
+            const nr = Math.round(r + (40 - r) * t);
             const ng = Math.round(g + (40 - g) * t);
-            const nb = Math.round(b + (40 - b) * t);
+            const nb = Math.round(b + (220 - b) * t);
             color = `rgb(${nr},${ng},${nb})`;
           }
         }
+        drawHex(cx, cy);
         ctx.fillStyle = color;
-        ctx.fillRect(patch.x * cell, drawY, cell, cell);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(30, 35, 45, 0.12)';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
       }
 
       // Draw agents
       if (currentState && currentState.agents) {
         for (const agent of currentState.agents) {
-          const cx = agent.x * cell + cell / 2;
-          const cy = (staticData.height - 1 - agent.y) * cell + cell / 2;
+          const [cx, cy] = hexCenter(agent.x, agent.y);
           ctx.beginPath();
-          ctx.arc(cx, cy, Math.max(2, Math.floor(cell * 0.35)), 0, Math.PI * 2);
+          ctx.arc(cx, cy, Math.max(2, Math.floor(size * 0.35)), 0, Math.PI * 2);
           ctx.fillStyle = stateColors[agent.state] || '#2266dd';
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1;
           ctx.stroke();
         }
-      }
-
-      // Grid lines
-      ctx.strokeStyle = 'rgba(30, 35, 45, 0.06)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= staticData.width; x++) {
-        ctx.beginPath(); ctx.moveTo(x * cell, 0); ctx.lineTo(x * cell, canvas.height); ctx.stroke();
-      }
-      for (let y = 0; y <= staticData.height; y++) {
-        ctx.beginPath(); ctx.moveTo(0, y * cell); ctx.lineTo(canvas.width, y * cell); ctx.stroke();
       }
     }
 
@@ -311,10 +328,6 @@ HTML_PAGE = r"""<!doctype html>
       document.getElementById('tick').textContent       = s.tick ?? 0;
       document.getElementById('running').textContent    = currentState.running ? 'Yes' : 'No';
       document.getElementById('active').textContent     = s.active ?? 0;
-      document.getElementById('evacuated').textContent  = s.evacuated ?? 0;
-      document.getElementById('dead').textContent       = s.dead ?? 0;
-      document.getElementById('stuck').textContent      = s.stuck ?? 0;
-      document.getElementById('panicking').textContent  = s.panicking ?? 0;
       document.getElementById('mean_speed').textContent = Number(s.mean_speed ?? 0).toFixed(3);
 
       renderAgentSummary(currentState.agents);
@@ -487,8 +500,7 @@ class AppContainer:
 
 def build_sim_config(payload: dict[str, Any], fallback: SimConfig) -> SimConfig:
     return SimConfig(
-        width=fallback.width,
-        height=fallback.height,
+        data_path=fallback.data_path,
         num_agents=int(payload.get("num_agents", fallback.num_agents)),
         steps=int(payload.get("steps", fallback.steps)),
         seed=(None if payload.get("seed") in (None, "", "null") else int(payload["seed"])),
@@ -566,8 +578,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=120)
     parser.add_argument("--num-agents", type=int, default=20)
     parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--width", type=int, default=40)
-    parser.add_argument("--height", type=int, default=40)
     parser.add_argument("--interval-ms", type=int, default=250)
     parser.add_argument(
         "--use-llm",
@@ -598,8 +608,6 @@ def main() -> None:
         scenario_path = str(p)
 
     config = SimConfig(
-        width=args.width,
-        height=args.height,
         num_agents=args.num_agents,
         steps=args.steps,
         seed=args.seed,

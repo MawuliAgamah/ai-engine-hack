@@ -49,6 +49,7 @@ class LLMSwarm:
         personality: str,
         scenario: str,
         awareness_radius: float = 8.0,
+        learnings: str = "",
     ) -> LLMAgent:
         """Create and place a single LLM-driven agent."""
         agent = LLMAgent(
@@ -60,6 +61,7 @@ class LLMSwarm:
             client=self.client,
             awareness_radius=awareness_radius,
             seed=int(self.rng.integers(0, 2**31)),
+            learnings=learnings,
         )
         self.agents[agent.id] = agent
         world.place_agent(agent.id, position.x, position.y)
@@ -75,6 +77,7 @@ class LLMSwarm:
         scenario: str,
         awareness_radius: float = 8.0,
         spawn_area: tuple[int, int, int, int] | None = None,
+        learnings: str = "",
     ) -> list[LLMAgent]:
         """Spawn *count* agents with the same goal/personality text.
 
@@ -84,7 +87,8 @@ class LLMSwarm:
         positions = self._get_spawn_positions(world, count, spawn_area)
         return [
             self.spawn_agent(
-                world, pos, goal, personality, scenario, awareness_radius
+                world, pos, goal, personality, scenario, awareness_radius,
+                learnings=learnings,
             )
             for pos in positions
         ]
@@ -222,6 +226,8 @@ class LLMSwarm:
         count: int,
         spawn_area: tuple[int, int, int, int] | None,
     ) -> list[Position]:
+        from swarm.core.world import Terrain
+
         if spawn_area:
             sx, sy, sw, sh = spawn_area
             candidates = [
@@ -230,9 +236,14 @@ class LLMSwarm:
                 for dx in range(sw)
                 if world.in_bounds(sx + dx, sy + dy)
                 and world.walkable_grid[sy + dy, sx + dx]
+                and int(world.terrain_grid[sy + dy, sx + dx]) != Terrain.EXIT.value
             ]
         else:
-            candidates = list(world.walkable_positions())
+            # Walkable non-exit cells only
+            candidates = [
+                p for p in world.walkable_positions()
+                if int(world.terrain_grid[p.y, p.x]) != Terrain.EXIT.value
+            ]
 
         if len(candidates) < count:
             raise ValueError(

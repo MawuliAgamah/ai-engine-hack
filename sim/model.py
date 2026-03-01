@@ -1,9 +1,9 @@
 """
 Mesa-compatible model wrapping the swarm simulation engine.
 
-Creates a randomised world with diverse terrain, spawns LLM-driven agents,
-and advances the simulation tick-by-tick.  Exposes helpers that the web
-viewer queries for state snapshots.
+Loads the world from real H3 hex-grid reference data (Southwark, London),
+spawns LLM-driven agents, and advances the simulation tick-by-tick.
+Exposes helpers that the web viewer queries for state snapshots.
 
 Supports two modes:
 
@@ -30,6 +30,7 @@ from swarm.core.clock import Clock
 from swarm.core.events import EventScheduler
 from swarm.core.world import Terrain, World
 from swarm.llm.client import LLMClient, MockClient
+from swarm.llm.learnings import load_learnings, save_learnings, summarise_generation
 from swarm.scenarios.loader import (
     BlackboardPost,
     ScenarioConfig,
@@ -43,6 +44,9 @@ load_dotenv()  # Load .env file from project root
 
 logger = logging.getLogger(__name__)
 
+# Default path to the reference data (relative to project root)
+DEFAULT_DATA_PATH = "reference_data/southwark_reference_data_table.parquet.gzip"
+
 
 # ── Configuration ────────────────────────────────────────────────────
 
@@ -51,8 +55,7 @@ logger = logging.getLogger(__name__)
 class SimConfig:
     """Core simulation parameters (flat / programmatic mode)."""
 
-    width: int = 40
-    height: int = 40
+    data_path: str = DEFAULT_DATA_PATH  # path to parquet/csv reference data
     num_agents: int = 20
     steps: int = 120
     seed: int | None = 42
@@ -63,17 +66,10 @@ class SimConfig:
     awareness_radius: float = 5.0
     use_llm: bool = False
     interval_ms: int = 250
-    # World generation
-    num_exits: int = 4
-    wall_density: float = 0.10
-    building_density: float = 0.08
-    grass_density: float = 0.12
-    water_density: float = 0.03
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "width": self.width,
-            "height": self.height,
+            "data_path": self.data_path,
             "num_agents": self.num_agents,
             "steps": self.steps,
             "seed": self.seed,
@@ -81,142 +77,6 @@ class SimConfig:
             "awareness_radius": self.awareness_radius,
             "use_llm": self.use_llm,
         }
-
-
-# ── Random world generation ─────────────────────────────────────────
-
-
-def generate_random_world(
-    width: int = 40,
-    height: int = 40,
-    rng: random.Random = None,
-    num_exits: int = 4,
-    wall_density: float = 0.10,
-    building_density: float = 0.08,
-    grass_density: float = 0.12,
-    water_density: float = 0.03,
-) -> World:
-    """Build a random world with mixed terrain for demonstration.
-
-    Layout strategy:
-    - Border walls on all edges
-    - Random exit positions along the border
-    - Interior mix of open, road, sidewalk, grass, buildings, obstacles, water
-    """
-    world = World(width, height)
-
-    # 1. Border walls
-    for x in range(width):
-        world.set_terrain(x, 0, Terrain.WALL)
-        world.set_terrain(x, height - 1, Terrain.WALL)
-    for y in range(height):
-        world.set_terrain(0, y, Terrain.WALL)
-        world.set_terrain(width - 1, y, Terrain.WALL)
-
-    # 2. Place exits along the border (replacing wall cells)
-    border_cells: list[tuple[int, int]] = []
-    for x in range(2, width - 2):
-        border_cells.append((x, 0))
-        border_cells.append((x, height - 1))
-    for y in range(2, height - 2):
-        border_cells.append((0, y))
-        border_cells.append((width - 1, y))
-    rng.shuffle(border_cells)
-    for i in range(min(num_exits, len(border_cells))):
-        ex, ey = border_cells[i]
-        world.set_terrain(ex, ey, Terrain.EXIT)
-
-    # 3. Interior terrain
-    interior: list[tuple[int, int]] = []
-    for y in range(1, height - 1):
-        for x in range(1, width - 1):
-            interior.append((x, y))
-
-    rng.shuffle(interior)
-    n_interior = len(interior)
-
-    # Carve a few "road" corridors (horizontal and vertical)
-    road_y = [height // 3, 2 * height // 3]
-    road_x = [width // 3, 2 * width // 3]
-    for y in range(1, height - 1):
-        for x in range(1, width - 1):
-            if y in road_y or x in road_x:
-                world.set_terrain(x, y, Terrain.ROAD)
-
-    # Sidewalk next to roads
-    for y in range(1, height - 1):
-        for x in range(1, width - 1):
-            if world.terrain_grid[y, x] != Terrain.ROAD:
-                # Check if adjacent to road
-                for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    ny, nx = y + dy, x + dx
-                    if 0 <= ny < height and 0 <= nx < width:
-                        if world.terrain_grid[ny, nx] == Terrain.ROAD:
-                            world.set_terrain(x, y, Terrain.SIDEWALK)
-                            break
-
-    # Place random terrain on remaining OPEN cells
-    open_cells = [
-        (x, y)
-        for x, y in interior
-        if world.terrain_grid[y, x] == Terrain.OPEN
-    ]
-    rng.shuffle(open_cells)
-
-    idx = 0
-    n_walls = int(wall_density * len(open_cells))
-    n_buildings = int(building_density * len(open_cells))
-    n_grass = int(grass_density * len(open_cells))
-    n_water = int(water_density * len(open_cells))
-
-    for _ in range(n_walls):
-        if idx >= len(open_cells):
-            break
-        x, y = open_cells[idx]
-        world.set_terrain(x, y, Terrain.WALL)
-        idx += 1
-
-    for _ in range(n_buildings):
-        if idx >= len(open_cells):
-            break
-        x, y = open_cells[idx]
-        world.set_terrain(x, y, Terrain.BUILDING)
-        idx += 1
-
-    for _ in range(n_grass):
-        if idx >= len(open_cells):
-            break
-        x, y = open_cells[idx]
-        world.set_terrain(x, y, Terrain.GRASS)
-        idx += 1
-
-    for _ in range(n_water):
-        if idx >= len(open_cells):
-            break
-        x, y = open_cells[idx]
-        world.set_terrain(x, y, Terrain.WATER)
-        idx += 1
-
-    # Scatter a few doors and stairs
-    remaining = [
-        (x, y)
-        for x, y in open_cells[idx:]
-        if world.terrain_grid[y, x] == Terrain.OPEN
-    ]
-    rng.shuffle(remaining)
-    n_doors = max(2, len(remaining) // 40)
-    n_stairs = max(1, len(remaining) // 60)
-    for i in range(n_doors):
-        if i < len(remaining):
-            x, y = remaining[i]
-            world.set_terrain(x, y, Terrain.DOOR)
-    for i in range(n_stairs):
-        j = n_doors + i
-        if j < len(remaining):
-            x, y = remaining[j]
-            world.set_terrain(x, y, Terrain.STAIRS)
-
-    return world
 
 
 # ── Model ────────────────────────────────────────────────────────────
@@ -248,8 +108,7 @@ class SwarmModel:
             # Build a SimConfig merging YAML values with any CLI overrides.
             total_agents = sum(g.count for g in sc.agent_groups) or 20
             config = SimConfig(
-                width=sc.width,
-                height=sc.height,
+                data_path=sc.data_path,
                 num_agents=total_agents,
                 steps=sc.steps,
                 seed=sc.seed,
@@ -260,11 +119,6 @@ class SwarmModel:
                 awareness_radius=sc.awareness_radius,
                 use_llm=sc.use_llm,
                 interval_ms=sc.interval_ms,
-                num_exits=sc.num_exits,
-                wall_density=sc.wall_density,
-                building_density=sc.building_density,
-                grass_density=sc.grass_density,
-                water_density=sc.water_density,
             )
         elif config is None:
             config = SimConfig()
@@ -274,20 +128,35 @@ class SwarmModel:
         self.tick = 0
         self.running = True
 
-        # Build world
-        self.world = generate_random_world(
-            width=config.width,
-            height=config.height,
-            rng=self.rng,
-            num_exits=config.num_exits,
-            wall_density=config.wall_density,
-            building_density=config.building_density,
-            grass_density=config.grass_density,
-            water_density=config.water_density,
-        )
+        # Build world from reference data
+        data_path = config.data_path
+        if not Path(data_path).is_absolute():
+            # Try relative to cwd, then relative to project root
+            if not Path(data_path).exists():
+                project_root = Path(__file__).resolve().parent.parent
+                candidate = project_root / data_path
+                if candidate.exists():
+                    data_path = str(candidate)
+        logger.info("Loading world from: %s", data_path)
+        self.world = World(data_path)
+
+        # Configure exits from scenario (if specified)
+        if self._scenario and self._scenario.num_exits is not None:
+            self.world.configure_exits(self._scenario.num_exits)
+            logger.info("Configured %d exits around periphery", self._scenario.num_exits)
 
         # Build LLM client
         self.client: LLMClient = self._make_client(config)
+
+        # ── Load generational learnings ───────────────────────────
+        scenario_name = self._scenario.name if self._scenario else "default"
+        self._scenario_name = scenario_name
+        self._learnings = load_learnings(scenario_name)
+        if self._learnings:
+            logger.info(
+                "Loaded %d chars of prior learnings for '%s'",
+                len(self._learnings), scenario_name,
+            )
 
         # Build swarm
         seed = config.seed or 42
@@ -314,6 +183,7 @@ class SwarmModel:
                         personality=personality_text,
                         scenario=config.scenario,
                         awareness_radius=config.awareness_radius,
+                        learnings=self._learnings,
                     )
         else:
             # Flat-mode batch spawn
@@ -324,6 +194,7 @@ class SwarmModel:
                 personality=config.personality,
                 scenario=config.scenario,
                 awareness_radius=config.awareness_radius,
+                learnings=self._learnings,
             )
 
         # ── Engine subsystems ─────────────────────────────────────
@@ -383,6 +254,27 @@ class SwarmModel:
         stats = self.swarm.get_stats()
         if tick >= self.config.steps or stats.active == 0:
             self.running = False
+            self._on_generation_complete()
+
+    def _on_generation_complete(self) -> None:
+        """Triggered once when the simulation finishes all timesteps.
+
+        Makes a final LLM call to summarise the collective agent experience
+        and saves the result to ``learnings/<scenario_name>.txt`` so the
+        next generation can benefit.
+        """
+        try:
+            stats_dict = self.get_stats_dict()
+            summary = summarise_generation(
+                client=self.client,
+                agents=self.swarm.all_agents,
+                scenario_text=self.config.scenario,
+                stats_dict=stats_dict,
+            )
+            path = save_learnings(self._scenario_name, summary)
+            logger.info("Generation complete — learnings saved to %s", path)
+        except Exception as exc:
+            logger.warning("Failed to generate/save learnings: %s", exc)
 
     @staticmethod
     def _make_client(config: SimConfig) -> LLMClient:
@@ -423,7 +315,12 @@ class SwarmModel:
         patches: list[dict[str, Any]] = []
         for y in range(self.world.height):
             for x in range(self.world.width):
-                t = Terrain(self.world.terrain_grid[y, x])
+                terrain_val = int(self.world.terrain_grid[y, x])
+                try:
+                    t = Terrain(terrain_val)
+                except ValueError:
+                    t = Terrain.OPEN
+                is_valid = (x, y) in self.world._valid_cells
                 patches.append({
                     "x": x,
                     "y": y,
@@ -432,6 +329,7 @@ class SwarmModel:
                     "cost": float(self.world.cost_grid[y, x]) if np.isfinite(self.world.cost_grid[y, x]) else 999,
                     "hazard": float(self.world.hazard_grid[y, x]),
                     "is_exit": t == Terrain.EXIT,
+                    "valid": is_valid,
                 })
         return patches
 

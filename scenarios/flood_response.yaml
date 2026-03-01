@@ -1,64 +1,71 @@
 # Flood Response Scenario
 # ======================
-# Coastal area with rising water levels.
-# Agents must evacuate to high ground before flooding spreads.
+# Rising water levels from the Thames in northern Southwark.
 
-agents:
-  seed: 123
-  groups:
-    # Beachgoers (close to danger)
-    - count: 40
-      spawn_area: { x: 10, y: 70, w: 60, h: 10 }
-      personality:
-        speed_mean: 1.2
-        speed_std: 0.3
-        panic_low: 0.2
-        panic_high: 0.5
-        herding_alpha: 4.0
-        herding_beta: 2.0
-
-    # Residents
-    - count: 100
-      spawn_area: { x: 5, y: 35, w: 100, h: 25 }
-      personality:
-        speed_mean: 0.9
-        speed_std: 0.2
-        panic_low: 0.4
-        panic_high: 0.8
-        herding_alpha: 2.0
-        herding_beta: 3.0
-
-    # Elderly / slow movers
-    - count: 30
-      spawn_area: { x: 35, y: 50, w: 40, h: 10 }
-      personality:
-        speed_mean: 0.5
-        speed_std: 0.1
-        panic_low: 0.6
-        panic_high: 0.95
-        risk_alpha: 1.5
-        risk_beta: 6.0
-
-hazards:
-  # Rising flood from the south
-  - type: flood
-    origin: { x: 75, y: 90 }
-    start_tick: 0
-    intensity: 1.0
-    spread_rate: 0.02
-    spread_radius: 50
-    duration: 0
-
-  # Secondary flood surge
-  - type: flood
-    origin: { x: 30, y: 85 }
-    start_tick: 300
-    intensity: 0.8
-    spread_rate: 0.03
-    spread_radius: 40
-    duration: 0
+scenario:
+  name: flood_response
+  description: >
+    The Thames is flooding into northern Southwark. Agents must
+    move south to higher ground and away from the river.
+  scenario_text: >
+    Flood warning! The Thames is overflowing. Water is rising
+    in the northern part of the area. Move south to safety.
+  goal: Evacuate south to higher ground. Avoid flooded areas.
 
 simulation:
+  steps: 50
+  seed: 123
   dt: 0.1
-  max_ticks: 5000
-  field_update_interval: 25
+  awareness_radius: 2.0
+  use_llm: true
+  interval_ms: 250
+
+world:
+  data_path: reference_data/southwark_reference_data_table.parquet.gzip
+  num_exits: 6
+
+agents:
+  groups:
+    - count: 6
+      name: riverside_resident
+      description: >
+        You live near the river. You know the area well and
+        move quickly when threatened.
+      goal: Evacuate south immediately to avoid the floodwater.
+
+    - count: 10
+      name: commuter
+      description: >
+        You are a commuter caught in the flood. You are stressed
+        and want to leave the area as fast as possible.
+      goal: Get to the southern exits as quickly as possible.
+
+    - count: 2
+      name: elderly
+      description: >
+        You are elderly and live in the area. You move slowly
+        and are frightened by the rising water.
+      goal: Find high ground. Move carefully and avoid water.
+
+pheromones:
+  - name: visited
+    decay_rate: 0.02
+    diffusion_rate: 0.05
+    max_value: 50.0
+  - name: danger
+    decay_rate: 0.05
+    diffusion_rate: 0.3
+    max_value: 100.0
+
+hazards:
+  - type: flood
+    origin: { x: 14, y: 33 }
+    start_tick: 0
+    intensity: 1.0
+    spread_rate: 0.1
+    spread_radius: 20
+    duration: 0
+    spread_direction:
+      - { angle: 180, strength: 0.6 }
+
+events: []

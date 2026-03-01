@@ -1,0 +1,15 @@
+- Move southward as quickly as possible to avoid rising floodwaters in the northern region; prioritize reducing y-coordinate over x-coordinate.  
+- People starting in the northern or central-west areas (e.g., (6,1), (11,23)) can reach safety efficiently by moving directly south or southeast.  
+- Avoid high-occupancy zones in the southeast corner (e.g., (23,27), (23,28))—these areas become congested and trap agents.  
+- Diagonal movement (e.g., southeast) is effective when terrain cost is low and the exit is in that direction, but prioritize straight south when possible.  
+- People with high terrain cost or blocked paths (e.g., (23,27)) should not attempt to move if no safe path exists—staying may be the only option.  
+- Early and consistent movement toward the southern exits (e.g., (13,11), (12,12)) increases survival chances; delayed movement leads to entrapment.  
+- People with a clear path to the south (e.g., (6,25), (7,29)) can reach safety in under 35 ticks if they avoid congestion.  
+- Elderly agents (e.g., (6,3), (11,23)) move slowly but can survive if they follow a steady southward path and avoid high-risk zones.  
+- People near the river (e.g., (8,6), (10,11)) should evacuate immediately—floods rise quickly in the north.  
+- The southern exit at (13,11) is a key evacuation point; agents should aim for it unless blocked.  
+- Avoid oscillating paths (e.g., (23,27) ↔ (22,28))—they waste time and increase risk.  
+- People with a clear goal (e.g., "evacuate south") succeed more than those with ambiguous or conflicting objectives.  
+- High-occupancy areas in the southeast (e.g., (23,27)) are dangerous and should be avoided unless absolutely necessary.  
+- People who reach the southern edge early (e.g., (13,11)) are more likely to survive; late arrivals face congestion and hazard escalation.  
+- Even slow-moving agents can survive if they maintain a consistent southward trajectory and avoid dead ends.
