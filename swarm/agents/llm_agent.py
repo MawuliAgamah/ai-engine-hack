@@ -89,6 +89,7 @@ class LLMAgent:
         client: LLMClient,
         awareness_radius: float = 8.0,
         seed: int | None = None,
+        learnings: str = "",
     ):
         self.id = agent_id
         self.position = position
@@ -109,6 +110,7 @@ class LLMAgent:
             scenario=scenario,
             personality=personality,
             goal=goal,
+            learnings=learnings,
         )
 
     # ── Properties ────────────────────────────────────────────────

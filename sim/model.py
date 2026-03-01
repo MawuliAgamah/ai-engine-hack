@@ -30,6 +30,7 @@ from swarm.core.clock import Clock
 from swarm.core.events import EventScheduler
 from swarm.core.world import Terrain, World
 from swarm.llm.client import LLMClient, MockClient
+from swarm.llm.learnings import load_learnings, save_learnings, summarise_generation
 from swarm.scenarios.loader import (
     BlackboardPost,
     ScenarioConfig,
@@ -147,6 +148,16 @@ class SwarmModel:
         # Build LLM client
         self.client: LLMClient = self._make_client(config)
 
+        # ── Load generational learnings ───────────────────────────
+        scenario_name = self._scenario.name if self._scenario else "default"
+        self._scenario_name = scenario_name
+        self._learnings = load_learnings(scenario_name)
+        if self._learnings:
+            logger.info(
+                "Loaded %d chars of prior learnings for '%s'",
+                len(self._learnings), scenario_name,
+            )
+
         # Build swarm
         seed = config.seed or 42
         self.swarm = LLMSwarm(
@@ -172,6 +183,7 @@ class SwarmModel:
                         personality=personality_text,
                         scenario=config.scenario,
                         awareness_radius=config.awareness_radius,
+                        learnings=self._learnings,
                     )
         else:
             # Flat-mode batch spawn
@@ -182,6 +194,7 @@ class SwarmModel:
                 personality=config.personality,
                 scenario=config.scenario,
                 awareness_radius=config.awareness_radius,
+                learnings=self._learnings,
             )
 
         # ── Engine subsystems ─────────────────────────────────────
@@ -241,6 +254,27 @@ class SwarmModel:
         stats = self.swarm.get_stats()
         if tick >= self.config.steps or stats.active == 0:
             self.running = False
+            self._on_generation_complete()
+
+    def _on_generation_complete(self) -> None:
+        """Triggered once when the simulation finishes all timesteps.
+
+        Makes a final LLM call to summarise the collective agent experience
+        and saves the result to ``learnings/<scenario_name>.txt`` so the
+        next generation can benefit.
+        """
+        try:
+            stats_dict = self.get_stats_dict()
+            summary = summarise_generation(
+                client=self.client,
+                agents=self.swarm.all_agents,
+                scenario_text=self.config.scenario,
+                stats_dict=stats_dict,
+            )
+            path = save_learnings(self._scenario_name, summary)
+            logger.info("Generation complete — learnings saved to %s", path)
+        except Exception as exc:
+            logger.warning("Failed to generate/save learnings: %s", exc)
 
     @staticmethod
     def _make_client(config: SimConfig) -> LLMClient:
