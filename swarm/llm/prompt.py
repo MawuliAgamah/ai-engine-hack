@@ -236,14 +236,6 @@ def build_user_message(
         )
     actions_text = "\n".join(action_lines)
 
-    # ── Journey history ───────────────────────────────────────────
-    recent_journey = journey_history[-max_journey:]
-    if recent_journey:
-        journey_lines = [f"  t={t}: ({p.x}, {p.y})" for t, p in recent_journey]
-        journey_text = "\n".join(journey_lines)
-    else:
-        journey_text = "  (first move — no history yet)"
-
     # ── Reasoning history ─────────────────────────────────────────
     recent_reasoning = reasoning_history[-max_reasoning:]
     if recent_reasoning:
@@ -264,9 +256,6 @@ def build_user_message(
         f"\n"
         f"## Available Actions\n"
         f"{actions_text}\n"
-        f"\n"
-        f"## Journey History (last {len(recent_journey)} steps)\n"
-        f"{journey_text}\n"
         f"\n"
         f"## Previous Reasoning\n"
         f"{reasoning_text}\n"
