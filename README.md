@@ -81,6 +81,15 @@ Think of it as the intersection of:
 └────────────────────────────────────────────────────────────┘
 ```
 
+## How to Run
+
+Add a `env` file with an `API_KEY` for an OpenAI Client and a `BASE_URL`. See .env.example for details. We recomment Doubleword!
+
+```bash
+pixi install
+pixi run python -m sim.web --host 127.0.0.1 --port 8765 --config baseline.yaml
+```
+
 ## Key Design Principles
 
 ### 1. Pixel-as-World-State

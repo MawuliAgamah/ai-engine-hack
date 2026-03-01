@@ -1,0 +1,103 @@
+# Baseline Scenario — Business as Usual
+# ======================================
+# No hazards, no events.  Agents simply navigate the environment.
+# Use this to explore personality diversity and emergent crowd behaviour.
+
+# ── Metadata ──────────────────────────────────────────────────────
+scenario:
+  name: baseline
+  description: >
+    Normal conditions — no emergencies.  Agents go about their business.
+    Useful for calibrating and observing pure crowd dynamics.
+  scenario_text: >
+    The area is operating normally. Navigate the area as you would on a normal day.
+  goal: >
+    Navigate the environment. Explore the area and find interesting places.
+
+# ── Simulation engine parameters ──────────────────────────────────
+simulation:
+  steps: 120
+  seed: 42
+  dt: 0.1
+  awareness_radius: 1.0
+  use_llm: true
+  interval_ms: 250
+
+# ── World generation ──────────────────────────────────────────────
+world:
+  width: 40
+  height: 40
+  num_exits: 4
+  wall_density: 0.10
+  building_density: 0.08
+  grass_density: 0.12
+  water_density: 0.03
+
+# ── Agent groups ──────────────────────────────────────────────────
+agents:
+  groups:
+    # Commuters — brisk, impatient, independent
+    - count: 8
+      name: commuter
+      description: >
+        You are a hurried commuter, trying to get to work on time.
+        Avoid crowds and move quickly.
+      goal: >
+        Reach your workplace at the north exit as quickly as possible.
+
+    # Tourists — slow, curious, herd-following
+    - count: 6
+      name: tourist
+      description: >
+        You are a tourist exploring the area. You are curious so stop
+        and look around often. Follow the crowds.
+      goal: >
+        Explore the area and take in the sights. Feel free to stop
+        and look around.
+
+    # Elderly — slow, patient, cautious
+    - count: 4
+      name: elderly
+      description: >
+        You are elderly and move carefully. You prefer familiar paths
+        and tend to move in a deliberate direction.
+      goal: >
+        Navigate to the south exit while avoiding crowded areas and
+        taking familiar paths.
+
+    # Children with parents — fast, low patience, herd-following
+    - count: 2
+      name: child
+      description: >
+        You are a child with a parent. You follow nearby people and
+        get distracted easily.
+      goal: >
+        Follow your parent and stay close to them.
+
+# ── Pheromone layers ──────────────────────────────────────────────
+pheromones:
+  - name: visited
+    decay_rate: 0.02
+    diffusion_rate: 0.05
+    max_value: 50.0
+  - name: exit_path
+    decay_rate: 0.03
+    diffusion_rate: 0.15
+    max_value: 100.0
+  - name: danger
+    decay_rate: 0.08
+    diffusion_rate: 0.2
+    max_value: 100.0
+  - name: congestion
+    decay_rate: 0.1
+    diffusion_rate: 0.1
+    max_value: 50.0
+
+# ── Hazard events (empty for baseline) ────────────────────────────
+hazards: []
+
+# ── Discrete events (empty for baseline) ──────────────────────────
+events: []
+
+# ── Blackboard alerts (empty for baseline) ────────────────────────
+blackboard: []

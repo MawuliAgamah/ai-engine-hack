@@ -1,0 +1,53 @@
+# Event Congestion Scenario
+# =========================
+# Large outdoor event (concert/festival) in a park.
+# Simulates crowd ingress, congestion pinch-points, and emergency evacuation.
+
+agents:
+  seed: 256
+  groups:
+    # General crowd near stage
+    - count: 300
+      spawn_area: { x: 30, y: 22, w: 120, h: 35 }
+      personality:
+        speed_mean: 0.8
+        speed_std: 0.2
+        panic_low: 0.3
+        panic_high: 0.6
+        herding_alpha: 5.0
+        herding_beta: 2.0
+
+    # Crowd in back areas
+    - count: 150
+      spawn_area: { x: 10, y: 65, w: 160, h: 40 }
+      personality:
+        speed_mean: 1.0
+        speed_std: 0.25
+        panic_low: 0.4
+        panic_high: 0.75
+
+    # VIP / staff (faster, calmer)
+    - count: 30
+      spawn_area: { x: 60, y: 5, w: 60, h: 15 }
+      personality:
+        speed_mean: 1.3
+        speed_std: 0.1
+        panic_low: 0.7
+        panic_high: 0.95
+        risk_alpha: 4.0
+        risk_beta: 2.0
+
+hazards:
+  # Crowd crush / stampede trigger (modeled as gas/pressure)
+  - type: gas
+    origin: { x: 90, y: 35 }
+    start_tick: 500
+    intensity: 0.6
+    spread_rate: 0.04
+    spread_radius: 25
+    duration: 200
+
+simulation:
+  dt: 0.1
+  max_ticks: 4000
+  field_update_interval: 20

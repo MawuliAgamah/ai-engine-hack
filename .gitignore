@@ -5,4 +5,13 @@
 # pycache
 __pycache__/
 
+# env
+.env
+
+# ipynb checkpoints
+.ipynb_checkpoints/
+
+# .egg-info
+*.egg-info/
+
 prototyping.ipynb
