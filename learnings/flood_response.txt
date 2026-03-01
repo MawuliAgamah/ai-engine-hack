@@ -1,15 +1,15 @@
-- Move southward as quickly as possible to avoid rising floodwaters in the north; prioritize direct south or southeast paths when feasible.  
-- Agents with high familiarity (e.g., local residents) tend to move faster and more efficiently toward southern exits.  
-- Avoid westward or northward movements unless necessary; the primary threat is in the northern region.  
-- Agents with a "commuter" personality prioritize speed and may oscillate between adjacent cells if the exit is nearby.  
-- Elderly agents move slowly and prefer low-cost, hazard-free paths; they often move directly south or west to reach higher ground.  
-- Direct south movement (y-decreasing) is optimal for most agents, especially when the exit is aligned vertically.  
-- Agents near the southern edge (e.g., y=0–2) can evacuate quickly, while those in the north (e.g., y=20+) require more time.  
-- Some agents get stuck in oscillation (e.g., between (13,25) and (12,25)) due to conflicting exit directions or low-cost alternatives.  
-- Exit direction vectors (e.g., (0.00, -1.00)) are reliable indicators of optimal movement; follow them to reduce distance to safety.  
-- Agents with a goal to "find high ground" should avoid low-lying areas and prioritize elevation, even if it means slower movement.  
-- The flood hazard is primarily in the north; agents should avoid returning to northern regions once they have moved south.  
-- Agents with a clear exit path (e.g., (6,1) → (6,1)) may evacuate in one tick if they are already at the exit.  
-- Movement toward the southern boundary (y=0) is generally safe and effective, especially when combined with east/west alignment.  
-- Agents should avoid unnecessary backtracking; once a southward path is established, maintain momentum.  
-- In cases of conflicting exit directions, prioritize the most direct southward movement to minimize exposure to rising water.
+- Move southward as quickly as possible to avoid rising floodwaters in the northern region; prioritize reducing y-coordinate over x-coordinate.  
+- People starting in the northern or central-west areas (e.g., (6,1), (11,23)) can reach safety efficiently by moving directly south or southeast.  
+- Avoid high-occupancy zones in the southeast corner (e.g., (23,27), (23,28))—these areas become congested and trap agents.  
+- Diagonal movement (e.g., southeast) is effective when terrain cost is low and the exit is in that direction, but prioritize straight south when possible.  
+- People with high terrain cost or blocked paths (e.g., (23,27)) should not attempt to move if no safe path exists—staying may be the only option.  
+- Early and consistent movement toward the southern exits (e.g., (13,11), (12,12)) increases survival chances; delayed movement leads to entrapment.  
+- People with a clear path to the south (e.g., (6,25), (7,29)) can reach safety in under 35 ticks if they avoid congestion.  
+- Elderly agents (e.g., (6,3), (11,23)) move slowly but can survive if they follow a steady southward path and avoid high-risk zones.  
+- People near the river (e.g., (8,6), (10,11)) should evacuate immediately—floods rise quickly in the north.  
+- The southern exit at (13,11) is a key evacuation point; agents should aim for it unless blocked.  
+- Avoid oscillating paths (e.g., (23,27) ↔ (22,28))—they waste time and increase risk.  
+- People with a clear goal (e.g., "evacuate south") succeed more than those with ambiguous or conflicting objectives.  
+- High-occupancy areas in the southeast (e.g., (23,27)) are dangerous and should be avoided unless absolutely necessary.  
+- People who reach the southern edge early (e.g., (13,11)) are more likely to survive; late arrivals face congestion and hazard escalation.  
+- Even slow-moving agents can survive if they maintain a consistent southward trajectory and avoid dead ends.

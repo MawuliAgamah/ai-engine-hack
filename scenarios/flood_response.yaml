@@ -13,7 +13,7 @@ scenario:
   goal: Evacuate south to higher ground. Avoid flooded areas.
 
 simulation:
-  steps: 400
+  steps: 50
   seed: 123
   dt: 0.1
   awareness_radius: 2.0
@@ -26,21 +26,21 @@ world:
 
 agents:
   groups:
-    - count: 10
+    - count: 6
       name: riverside_resident
       description: >
         You live near the river. You know the area well and
         move quickly when threatened.
       goal: Evacuate south immediately to avoid the floodwater.
 
-    - count: 8
+    - count: 10
       name: commuter
       description: >
         You are a commuter caught in the flood. You are stressed
         and want to leave the area as fast as possible.
       goal: Get to the southern exits as quickly as possible.
 
-    - count: 5
+    - count: 2
       name: elderly
       description: >
         You are elderly and live in the area. You move slowly
@@ -62,7 +62,7 @@ hazards:
     origin: { x: 14, y: 33 }
     start_tick: 0
     intensity: 1.0
-    spread_rate: 0.015
+    spread_rate: 0.1
     spread_radius: 20
     duration: 0
     spread_direction:
