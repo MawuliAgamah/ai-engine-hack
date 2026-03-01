@@ -279,9 +279,9 @@ HTML_PAGE = r"""<!doctype html>
             const r = parseInt(color.slice(1,3), 16);
             const g = parseInt(color.slice(3,5), 16);
             const b = parseInt(color.slice(5,7), 16);
-            const nr = Math.round(r + (220 - r) * t);
+            const nr = Math.round(r + (40 - r) * t);
             const ng = Math.round(g + (40 - g) * t);
-            const nb = Math.round(b + (40 - b) * t);
+            const nb = Math.round(b + (220 - b) * t);
             color = `rgb(${nr},${ng},${nb})`;
           }
         }
